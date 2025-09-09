@@ -45,7 +45,12 @@ const InstanceManagement = () => {
     } catch (error) {
       console.error('获取实例数据失败:', error);
       message.error('获取实例数据失败，请检查后端服务');
-      setInstanceData([]);
+      // 设置所有实例状态为"未连接"
+      const disconnectedInstances = instanceData.map(instance => ({
+        ...instance,
+        status: 'disconnected'
+      }));
+      setInstanceData(disconnectedInstances);
     } finally {
       setLoading(false);
     }
@@ -60,9 +65,10 @@ const InstanceManagement = () => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
-      error: { color: 'error', text: '异常' }
+      error: { color: 'error', text: '异常' },
+      disconnected: { color: 'default', text: '未连接' }
     };
-    const config = statusMap[status];
+    const config = statusMap[status] || { color: 'default', text: '未连接' };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 

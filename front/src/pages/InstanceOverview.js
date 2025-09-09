@@ -37,7 +37,7 @@ const InstanceOverview = () => {
       trend: { text: '—', type: 'down' }
     },
     {
-      title: '未连接实例',
+      title: '异常实例',
       value: 0,
       color: '#ff4d4f',
       icon: <ExclamationCircleOutlined />,
@@ -63,8 +63,13 @@ const InstanceOverview = () => {
     } catch (error) {
       console.error('获取实例数据失败:', error);
       message.error('获取实例数据失败，请检查后端服务');
-      setInstanceData([]);
-      updateStatsData([]);
+      // 设置所有实例状态为"未连接"
+      const disconnectedInstances = instanceData.map(instance => ({
+        ...instance,
+        status: 'disconnected'
+      }));
+      setInstanceData(disconnectedInstances);
+      updateStatsData(disconnectedInstances);
     } finally {
       setLoading(false);
     }
@@ -78,7 +83,7 @@ const InstanceOverview = () => {
       name: instance.instanceName,
       ip: `${instance.host}:${instance.port}`,
       type: instance.dbType,
-      status: 'disconnected', // 统一设置为未连接状态
+      status: instance.status,
       cpuUsage: instance.cpuUsage,
       memoryUsage: instance.memoryUsage,
       storage: instance.storage,
@@ -99,9 +104,9 @@ const InstanceOverview = () => {
   // 更新统计数据
   const updateStatsData = (instances) => {
     const totalCount = instances.length;
-    const runningCount = 0; // 所有实例都设为未连接，运行中为0
-    const warningCount = 0; // 所有实例都设为未连接，需要优化为0
-    const errorCount = instances.filter(item => item.status === 'disconnected').length; // 未连接实例数
+    const runningCount = instances.filter(item => item.status === 'running').length;
+    const warningCount = instances.filter(item => item.status === 'warning').length;
+    const errorCount = instances.filter(item => item.status === 'error' || item.status === 'disconnected').length;
 
     setStatsData(prevStats => prevStats.map((stat, index) => {
       const values = [totalCount, runningCount, warningCount, errorCount];
