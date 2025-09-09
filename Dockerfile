@@ -33,9 +33,9 @@ COPY backend/ ./
 # Copy frontend build files
 COPY --from=frontend-build /app/frontend/build ./build
 
-# CloudBase health check expects port 80
-ENV PORT=80
-EXPOSE 80
+# CloudBase Run listens on 8080 by default
+ENV PORT=8080
+EXPOSE 8080
 
 # Start with gunicorn loading the WSGI app defined in app/wsgi.py
-CMD ["gunicorn", "--bind", ":80", "--workers", "1", "--threads", "8", "--timeout", "0", "app.wsgi:app"]
+CMD ["gunicorn", "--bind", ":8080", "--workers", "1", "--threads", "8", "--timeout", "0", "app.wsgi:app"]

@@ -1,7 +1,6 @@
 // API配置
-// CloudBase云托管服务地址 - 使用相对路径，通过CloudBase Framework路由
-// 优先从环境变量读取后端地址，构建时设置 REACT_APP_API_BASE_URL；为空则走相对路径
-const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/+$/, '');
+// 后端服务地址 - 优先从环境变量读取，默认使用Zeabur部署的后端地址
+const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'https://1049726439demo.zeabur.app').replace(/\/+$/, '');
 
 export const API_ENDPOINTS = {
   INSTANCES: `/api/instances`,
