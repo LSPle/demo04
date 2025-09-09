@@ -73,7 +73,10 @@ def create_app():
     
     # Register WebSocket events
     register_websocket_events()
-
+    
+    # 启动实例监控服务（应用启动时自动开始监控）
+    websocket_service.start_monitoring()
+    
     return app
 
 def register_websocket_events():
@@ -85,9 +88,7 @@ def register_websocket_events():
         import logging
         logger = logging.getLogger(__name__)
         logger.info('客户端已连接')
-        # 启动监控服务
-        websocket_service.start_monitoring()
-        # 发送当前状态
+        # 发送当前状态（监控服务已在应用启动时启动）
         websocket_service.broadcast_current_status()
         
     @socketio.on('disconnect')
