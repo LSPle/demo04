@@ -1,5 +1,7 @@
 // API配置
-const API_BASE_URL = '';
+// CloudBase云托管服务地址 - 使用相对路径，通过CloudBase Framework路由
+// 优先从环境变量读取后端地址，构建时设置 REACT_APP_API_BASE_URL；为空则走相对路径
+const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || '').replace(/\/+$/, '');
 
 export const API_ENDPOINTS = {
   INSTANCES: `/api/instances`,
