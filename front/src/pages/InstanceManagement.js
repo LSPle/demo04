@@ -46,12 +46,16 @@ const InstanceManagement = () => {
       console.error('获取实例数据失败:', error);
       message.error('获取实例数据失败，请检查后端服务');
       
-      // 当API获取失败时，将现有实例状态设置为已关闭
-      const closedInstances = instanceData.map(instance => ({
-        ...instance,
-        status: 'closed'
-      }));
-      setInstanceData(closedInstances);
+      // 当API获取失败时，如果有现有数据则设置为已关闭状态，否则设置为空数组
+      if (instanceData.length > 0) {
+        const closedInstances = instanceData.map(instance => ({
+          ...instance,
+          status: 'closed'
+        }));
+        setInstanceData(closedInstances);
+      } else {
+        setInstanceData([]);
+      }
     } finally {
       setLoading(false);
     }

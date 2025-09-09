@@ -73,7 +73,7 @@ const SlowQueryLogs = () => {
       title: '查询时间',
       dataIndex: 'start_time',
       key: 'start_time',
-      width: 180,
+      width: 160,
       sorter: (a, b) => {
         const timeA = a.start_time ? new Date(a.start_time).getTime() : 0;
         const timeB = b.start_time ? new Date(b.start_time).getTime() : 0;
@@ -85,7 +85,7 @@ const SlowQueryLogs = () => {
       title: '用户和主机',
       dataIndex: 'user_host',
       key: 'user_host',
-      width: 220,
+      width: 180,
       ellipsis: true,
       render: (text) => <Tooltip title={text}>{text}</Tooltip>
     },
@@ -93,51 +93,30 @@ const SlowQueryLogs = () => {
       title: '查询语句',
       dataIndex: 'sql_text',
       key: 'sql_text',
-      width: 550,
       ellipsis: true,
       render: (text) => {
         const SqlTextCell = ({ sql }) => {
-          const [showViewAll, setShowViewAll] = useState(false);
-          const textRef = React.useRef(null);
-
-          React.useEffect(() => {
-            if (textRef.current && sql) {
-              // 检查文本是否超出容器宽度
-              const isOverflowing = textRef.current.scrollWidth > textRef.current.clientWidth;
-              setShowViewAll(isOverflowing);
-            }
-          }, [sql]);
-
           return (
-            <div style={{ position: 'relative', maxWidth: 530 }}>
-              <div 
-                ref={textRef}
-                style={{ 
-                  whiteSpace: 'nowrap', 
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Tooltip title={sql}>
+                <span style={{ 
+                  flex: 1,
                   overflow: 'hidden', 
                   textOverflow: 'ellipsis',
-                  paddingRight: showViewAll ? '70px' : '0' // 为按钮预留空间
-                }}
-              >
-                <Tooltip title={sql}>{sql}</Tooltip>
-              </div>
-              {showViewAll && (
+                  whiteSpace: 'nowrap'
+                }}>
+                  {sql}
+                </span>
+              </Tooltip>
+              {sql && sql.length > 50 && (
                 <Button 
                   type="link" 
                   size="small" 
                   style={{ 
-                    position: 'absolute',
-                    right: 0,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
                     padding: '0 4px',
                     height: 'auto',
-                    lineHeight: '1.2',
                     fontSize: '12px',
-                    background: 'rgba(255, 255, 255, 0.9)',
-                    border: '1px solid #d9d9d9',
-                    borderRadius: '4px',
-                    zIndex: 1
+                    flexShrink: 0
                   }} 
                   onClick={() => setSqlPreview({ open: true, sql })}
                 >
@@ -218,68 +197,77 @@ const SlowQueryLogs = () => {
           </div>
 
           {/* 筛选 */}
-          <Form layout="inline" onFinish={onSearch} style={{ gap: 12, flexWrap: 'wrap' }}>
-            <Form.Item label="关键字">
-              <Input
-                placeholder="SQL包含..."
-                allowClear
-                style={{ width: 220 }}
-                value={filters.keyword}
-                onChange={e => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="库名">
-              <Input
-                placeholder="db 名称"
-                allowClear
-                style={{ width: 160 }}
-                value={filters.db}
-                onChange={e => setFilters(prev => ({ ...prev, db: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="用户/主机">
-              <Input
-                placeholder="User@Host"
-                allowClear
-                style={{ width: 200 }}
-                value={filters.user_host}
-                onChange={e => setFilters(prev => ({ ...prev, user_host: e.target.value }))}
-              />
-            </Form.Item>
-            <Form.Item label="时间范围">
-              <RangePicker
-                showTime
-                value={filters.range}
-                onChange={(v) => setFilters(prev => ({ ...prev, range: v || [] }))}
-              />
-            </Form.Item>
-            <Form.Item>
+          <div style={{ background: '#fafafa', padding: 16, borderRadius: 6 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16, marginBottom: 16 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>关键字</label>
+                <Input
+                  placeholder="SQL包含..."
+                  allowClear
+                  value={filters.keyword}
+                  onChange={e => setFilters(prev => ({ ...prev, keyword: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>库名</label>
+                <Input
+                  placeholder="db 名称"
+                  allowClear
+                  value={filters.db}
+                  onChange={e => setFilters(prev => ({ ...prev, db: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>用户/主机</label>
+                <Input
+                  placeholder="User@Host"
+                  allowClear
+                  value={filters.user_host}
+                  onChange={e => setFilters(prev => ({ ...prev, user_host: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>时间范围</label>
+                <RangePicker
+                  showTime
+                  style={{ width: '100%' }}
+                  value={filters.range}
+                  onChange={(v) => setFilters(prev => ({ ...prev, range: v || [] }))}
+                />
+              </div>
+            </div>
+            <div style={{ textAlign: 'right' }}>
               <Space>
-                <Button type="primary" htmlType="submit" disabled={!instanceId}>查询</Button>
                 <Button onClick={onReset}>重置</Button>
+                <Button type="primary" onClick={onSearch} disabled={!instanceId}>查询</Button>
               </Space>
-            </Form.Item>
-          </Form>
+            </div>
+          </div>
 
           {/* 表格 */}
-          <Table
-            rowKey={(r, idx) => `${r.start_time}-${idx}`}
-            columns={columns}
-            loading={loading}
-            dataSource={data.items}
-            pagination={{
-              current: page,
-              pageSize,
-              total: data.total,
-              showSizeChanger: true,
-              pageSizeOptions: [10, 20, 50, 100],
-              onChange: (p, ps) => {
-                setPage(p);
-                setPageSize(ps);
-                fetchSlowLogs(instanceId, p, ps, filters);
-              }
-            }}
-          />
+          <div style={{ overflowX: 'auto' }}>
+            <Table
+              rowKey={(r, idx) => `${r.start_time}-${idx}`}
+              columns={columns}
+              loading={loading}
+              dataSource={data.items}
+              scroll={{ x: 1200 }}
+              pagination={{
+                current: page,
+                pageSize,
+                total: data.total,
+                showSizeChanger: true,
+                pageSizeOptions: [10, 20, 50, 100],
+                showQuickJumper: true,
+                showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
+                onChange: (p, ps) => {
+                  setPage(p);
+                  setPageSize(ps);
+                  fetchSlowLogs(instanceId, p, ps, filters);
+                }
+              }}
+            />
+          </div>
         </Space>
       </Card>
 

@@ -66,7 +66,8 @@ def analyze_sql():
                 context_summary = context_summary + "\n" + extra_summary
         except Exception as e:
             # 采样或EXPLAIN失败不致命，降级为基础元信息
-            context_summary = context_summary + f"\n上下文生成失败: {e}"
+            logger.warning(f"上下文生成失败 (实例ID: {instance_id}): {e}")
+            context_summary = context_summary + f"\n上下文生成失败: {str(e)}"
 
         client = get_deepseek_client()
         # 使用增强的分析接口，拿到分析文本与可能的重写SQL

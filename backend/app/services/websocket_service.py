@@ -35,12 +35,9 @@ class WebSocketService:
                 self.monitoring_thread.daemon = True
                 self.monitoring_thread.start()
                 logger.info("实时监控线程已启动")
-                logger.info("实时监控线程已启动")
             else:
                 logger.info("监控线程已在运行")
-                logger.info("监控线程已在运行")
         except Exception as e:
-            logger.error(f"启动监控线程失败: {e}")
             logger.error(f"启动监控线程失败: {e}")
             
     def stop_monitoring(self):
