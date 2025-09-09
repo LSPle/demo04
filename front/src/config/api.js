@@ -1,6 +1,6 @@
 // API配置
-// 后端服务地址 - 优先从环境变量读取，默认使用Zeabur部署的后端地址
-const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'https://1049726439demo.zeabur.app').replace(/\/+$/, '');
+// 后端服务地址 - 优先从环境变量读取，默认使用本地后端地址
+const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001').replace(/\/+$/, '');
 
 export const API_ENDPOINTS = {
   INSTANCES: `${API_BASE_URL}/api/instances`,

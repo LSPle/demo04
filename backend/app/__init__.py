@@ -3,12 +3,14 @@ from flask import Flask, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from flask_socketio import SocketIO
 from .config import Config
 
 # Initialize extensions
 
 db = SQLAlchemy()
 jwt = JWTManager()
+socketio = SocketIO()
 
 
 def create_app():
@@ -21,6 +23,7 @@ def create_app():
     db.init_app(app)
     jwt.init_app(app)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
+    socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
     # Register blueprints
     from .routes.auth import auth_bp
@@ -63,5 +66,33 @@ def create_app():
     # Create database tables if they don't exist
     with app.app_context():
         db.create_all()
+        
+    # Initialize WebSocket service
+    from .services.websocket_service import websocket_service
+    websocket_service.init_socketio(socketio, app)
+    
+    # Register WebSocket events
+    register_websocket_events()
 
     return app
+
+def register_websocket_events():
+    """注册WebSocket事件处理器"""
+    from .services.websocket_service import websocket_service
+    
+    @socketio.on('connect')
+    def handle_connect():
+        print('客户端已连接')
+        # 启动监控服务
+        websocket_service.start_monitoring()
+        # 发送当前状态
+        websocket_service.broadcast_current_status()
+        
+    @socketio.on('disconnect')
+    def handle_disconnect():
+        print('客户端已断开连接')
+        
+    @socketio.on('request_status_update')
+    def handle_status_request():
+        """处理客户端请求状态更新"""
+        websocket_service.broadcast_current_status()

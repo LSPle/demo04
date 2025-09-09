@@ -7,9 +7,11 @@ import {
   ExclamationCircleOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
-  ReloadOutlined
+  ReloadOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
+import websocketService from '../services/websocketService';
 
 const InstanceOverview = () => {
   // 状态管理
@@ -45,8 +47,8 @@ const InstanceOverview = () => {
       trend: { text: '—', type: 'down' }
     }
   ]);
-
-  const eventSourceRef = null; // Disabled: SSE connection closed per Plan A
+  
+  const [wsConnected, setWsConnected] = useState(false);
 
   // 模拟后端API数据（包含指定的测试实例）
   const mockApiData = [
@@ -150,14 +152,88 @@ const InstanceOverview = () => {
     }));
   };
 
-  // 组件挂载时获取数据，并设置更频繁的轮询（每10秒）
+  // WebSocket事件处理
   useEffect(() => {
+    // 连接WebSocket
+    websocketService.connect();
+    
+    // 监听连接状态变化
+    const handleConnectionChange = () => {
+      const status = websocketService.getConnectionStatus();
+      setWsConnected(status.isConnected);
+    };
+    
+    // 监听实例状态变化
+    const handleInstanceStatusChange = (data) => {
+      console.log('收到实例状态变化:', data);
+      message.info(`实例 ${data.name} 状态变更为: ${data.status === 'running' ? '运行中' : '异常'}`);
+      
+      // 更新单个实例状态
+      setInstanceData(prevData => 
+        prevData.map(instance => 
+          instance.key === data.id 
+            ? { ...instance, status: data.status }
+            : instance
+        )
+      );
+    };
+    
+    // 监听状态汇总更新
+    const handleStatusSummaryUpdate = (data) => {
+      console.log('收到状态汇总更新:', data);
+      setStatsData(prevStats => prevStats.map((stat, index) => {
+        const values = [data.total, data.running, data.warning || 0, data.error];
+        return {
+          ...stat,
+          value: values[index]
+        };
+      }));
+    };
+    
+    // 监听所有实例状态更新
+    const handleInstancesStatusUpdate = (data) => {
+      console.log('收到所有实例状态更新:', data);
+      if (data.instances) {
+        const formattedData = data.instances.map(instance => ({
+          key: instance.id,
+          name: instance.name,
+          ip: `${instance.host}:${instance.port}`,
+          type: 'MySQL', // 默认类型
+          status: instance.status,
+          cpuUsage: Math.floor(Math.random() * 100), // 模拟数据
+          memoryUsage: Math.floor(Math.random() * 100), // 模拟数据
+          storage: Math.floor(Math.random() * 100), // 模拟数据
+          connectionInfo: {
+            host: instance.host,
+            port: instance.port
+          }
+        }));
+        setInstanceData(formattedData);
+      }
+      
+      if (data.summary) {
+        handleStatusSummaryUpdate(data.summary);
+      }
+    };
+    
+    // 注册事件监听器
+    websocketService.on('instanceStatusChange', handleInstanceStatusChange);
+    websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
+    websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
+    
+    // 初始获取数据
     fetchInstanceData();
-    const interval = setInterval(fetchInstanceData, 10000);
-
-
+    
+    // 定期检查连接状态
+    const statusInterval = setInterval(handleConnectionChange, 1000);
+    
+    // 清理函数
     return () => {
-      clearInterval(interval);
+      clearInterval(statusInterval);
+      websocketService.off('instanceStatusChange', handleInstanceStatusChange);
+      websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
+      websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
+      // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
     };
   }, []);
 
@@ -218,14 +294,24 @@ const InstanceOverview = () => {
             <h1>实例概览</h1>
             <p>数据库实例运行状态总览</p>
           </div>
-          <Button 
-            type="primary" 
-            icon={<ReloadOutlined />} 
-            onClick={refreshInstanceStatus}
-            loading={loading}
-          >
-            刷新状态
-          </Button>
+          <Space>
+            {/* WebSocket连接状态指示器 */}
+            <Tag 
+              color={wsConnected ? 'success' : 'error'} 
+              icon={<WifiOutlined />}
+              style={{ marginRight: 8 }}
+            >
+              {wsConnected ? '实时连接' : '连接断开'}
+            </Tag>
+            <Button 
+              type="primary" 
+              icon={<ReloadOutlined />} 
+              onClick={refreshInstanceStatus}
+              loading={loading}
+            >
+              刷新状态
+            </Button>
+          </Space>
         </div>
       </div>
 
