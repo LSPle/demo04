@@ -17,6 +17,9 @@ export const API_ENDPOINTS = {
   SLOWLOG_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog/analyze`,
   // 新增：慢日志列表（GET）
   SLOWLOG_LIST: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog`,
+  // 新增：实例状态检测接口
+  MONITOR_CHECK: `${API_BASE_URL}/api/monitor/instances/check`,
+  MONITOR_SUMMARY: `${API_BASE_URL}/api/monitor/instances/summary`,
   METRICS: `${API_BASE_URL}/api/metrics`,
 };
 

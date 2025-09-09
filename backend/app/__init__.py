@@ -31,6 +31,7 @@ def create_app():
     from .routes.config_optimize import config_opt_bp
     from .routes.arch_optimize import arch_opt_bp
     from .routes.slowlog import slowlog_bp
+    from .routes.monitor import monitor_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(instances_bp, url_prefix='/api')
@@ -39,6 +40,7 @@ def create_app():
     app.register_blueprint(config_opt_bp, url_prefix='/api')
     app.register_blueprint(arch_opt_bp, url_prefix='/api')
     app.register_blueprint(slowlog_bp, url_prefix='/api')
+    app.register_blueprint(monitor_bp, url_prefix='/api')
 
     # Serve React build files
     build_dir = os.path.join(os.path.dirname(os.path.dirname(app.root_path)), 'build')

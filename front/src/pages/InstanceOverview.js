@@ -6,7 +6,8 @@ import {
   WarningOutlined,
   ExclamationCircleOutlined,
   ArrowUpOutlined,
-  ArrowDownOutlined
+  ArrowDownOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
 
@@ -76,6 +77,37 @@ const InstanceOverview = () => {
     }
   };
 
+  // 刷新实例状态
+  const refreshInstanceStatus = async () => {
+    try {
+      setLoading(true);
+      message.loading('正在检测实例状态...', 0);
+      
+      // 调用后端状态检测接口
+      const response = await fetch(API_ENDPOINTS.MONITOR_CHECK, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) throw new Error('状态检测失败');
+      const result = await response.json();
+      
+      message.destroy();
+      message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
+      
+      // 重新获取实例数据
+      await fetchInstanceData();
+    } catch (error) {
+      message.destroy();
+      console.error('刷新实例状态失败:', error);
+      message.error('刷新实例状态失败，请检查后端服务');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 处理实例数据
   const processInstanceData = (data) => {
     // 转换后端数据格式以匹配前端展示需求
@@ -135,7 +167,7 @@ const InstanceOverview = () => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
-      error: { color: 'error', text: '异常' },
+      error: { color: 'default', text: '已关闭' },
       closed: { color: 'default', text: '已关闭' }
     };
     const config = statusMap[status] || { color: 'default', text: '未知' };
@@ -181,8 +213,20 @@ const InstanceOverview = () => {
     <div className="fade-in-up">
       {/* 页面标题 */}
       <div className="page-header">
-        <h1>实例概览</h1>
-        <p>数据库实例运行状态总览</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1>实例概览</h1>
+            <p>数据库实例运行状态总览</p>
+          </div>
+          <Button 
+            type="primary" 
+            icon={<ReloadOutlined />} 
+            onClick={refreshInstanceStatus}
+            loading={loading}
+          >
+            刷新状态
+          </Button>
+        </div>
       </div>
 
       {/* 统计卡片 */}

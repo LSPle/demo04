@@ -66,7 +66,7 @@ const InstanceManagement = () => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
-      error: { color: 'error', text: '异常' },
+      error: { color: 'default', text: '已关闭' },
       closed: { color: 'default', text: '已关闭' }
     };
     const config = statusMap[status] || { color: 'default', text: '未知' };
