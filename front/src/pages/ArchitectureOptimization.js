@@ -85,7 +85,8 @@ const ArchitectureOptimization = () => {
         if (!response.ok) throw new Error('API响应失败');
         const data = await response.json();
         const options = (Array.isArray(data) ? data : [])
-          .filter((inst) => inst.status !== 'error')
+          // 仅展示运行中的实例
+          .filter((inst) => inst.status === 'running')
           .map((inst) => ({
             value: String(inst.id),
             label: `${inst.instanceName} (${inst.dbType}) ${inst.host}:${inst.port}`,

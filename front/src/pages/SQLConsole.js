@@ -46,7 +46,9 @@ const SQLConsole = () => {
         const data = await res.json();
         if (!res.ok) throw new Error(data?.error || '获取实例列表失败');
         const list = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
-        const options = list.map((inst) => ({
+        // 仅展示运行中的实例
+        const filteredList = list.filter(inst => inst.status === 'running');
+        const options = filteredList.map((inst) => ({
           value: String(inst.id),
           label: `${inst.instanceName} (${inst.dbType}) ${inst.host}:${inst.port}`
         }));

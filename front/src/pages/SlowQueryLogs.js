@@ -21,7 +21,9 @@ const SlowQueryLogs = () => {
       .then(res => res.json())
       .then(json => {
         const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
-        setInstances(list);
+        // 仅展示运行中的实例
+        const runningInstances = list.filter(inst => inst.status === 'running');
+        setInstances(runningInstances);
       })
       .catch(() => {});
   }, []);
