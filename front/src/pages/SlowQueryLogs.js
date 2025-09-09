@@ -17,7 +17,7 @@ const SlowQueryLogs = () => {
 
   // 加载实例列表
   useEffect(() => {
-    fetch(`${API_BASE_URL}${API_ENDPOINTS.INSTANCES}`)
+    fetch(API_ENDPOINTS.INSTANCES)
       .then(res => res.json())
       .then(json => {
         const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
@@ -40,7 +40,7 @@ const SlowQueryLogs = () => {
         params.set('start_time', f.range[0].toISOString());
         params.set('end_time', f.range[1].toISOString());
       }
-      const res = await fetch(`${API_BASE_URL}${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`);
+      const res = await fetch(`${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`);
       const json = await res.json();
       if (!res.ok) {
         // 若后端返回 overview 但报错（比如 FILE 输出），给出提示
