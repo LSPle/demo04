@@ -37,7 +37,7 @@ const InstanceOverview = () => {
       trend: { text: '—', type: 'down' }
     },
     {
-      title: '异常实例',
+      title: '未连接实例',
       value: 0,
       color: '#ff4d4f',
       icon: <ExclamationCircleOutlined />,
@@ -78,7 +78,7 @@ const InstanceOverview = () => {
       name: instance.instanceName,
       ip: `${instance.host}:${instance.port}`,
       type: instance.dbType,
-      status: instance.status,
+      status: 'disconnected', // 统一设置为未连接状态
       cpuUsage: instance.cpuUsage,
       memoryUsage: instance.memoryUsage,
       storage: instance.storage,
@@ -99,9 +99,9 @@ const InstanceOverview = () => {
   // 更新统计数据
   const updateStatsData = (instances) => {
     const totalCount = instances.length;
-    const runningCount = instances.filter(item => item.status === 'running').length;
-    const warningCount = instances.filter(item => item.status === 'warning').length;
-    const errorCount = instances.filter(item => item.status === 'error').length;
+    const runningCount = 0; // 所有实例都设为未连接，运行中为0
+    const warningCount = 0; // 所有实例都设为未连接，需要优化为0
+    const errorCount = instances.filter(item => item.status === 'disconnected').length; // 未连接实例数
 
     setStatsData(prevStats => prevStats.map((stat, index) => {
       const values = [totalCount, runningCount, warningCount, errorCount];
@@ -129,9 +129,10 @@ const InstanceOverview = () => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
-      error: { color: 'error', text: '异常' }
+      error: { color: 'error', text: '异常' },
+      disconnected: { color: 'default', text: '未连接' }
     };
-    const config = statusMap[status];
+    const config = statusMap[status] || { color: 'default', text: '未连接' };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
