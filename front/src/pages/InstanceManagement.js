@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Space, Modal, Form, Input, Select, message, Popconfirm, Tooltip } from 'antd';
+import { Card, Table, Button, Space, Tag, Input, Select, Modal, Form, message } from 'antd';
 import {
   PlusOutlined,
   SearchOutlined,
@@ -66,20 +66,10 @@ const InstanceManagement = () => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
-      error: { color: 'default', text: '已关闭' },
+      error: { color: 'error', text: '异常' },
       closed: { color: 'default', text: '已关闭' }
     };
     const config = statusMap[status] || { color: 'default', text: '未知' };
-    
-    // 为error状态添加详细的错误提示
-    if (status === 'error') {
-      return (
-        <Tooltip title="实例连接失败：连接超时或实例不可达。请检查实例是否正常运行，网络连接是否正常，或点击'刷新状态'重新检测。">
-          <Tag color={config.color}>{config.text}</Tag>
-        </Tooltip>
-      );
-    }
-    
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
