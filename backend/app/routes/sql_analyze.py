@@ -10,19 +10,40 @@ sql_analyze_bp = Blueprint('sql_analyze', __name__)
 def analyze_sql():
     """仅支持MySQL；执行轻量的表采样与EXPLAIN，连同SQL提交给LLM，返回分析与可选重写SQL。"""
     try:
-        data = request.get_json() or {}
-        instance_id = int(data.get('instanceId') or 0)
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "请求体不能为空"}), 400
+            
+        # 验证instanceId
+        try:
+            instance_id = int(data.get('instanceId') or 0)
+            if instance_id <= 0:
+                return jsonify({"error": "实例ID必须是正整数"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "实例ID必须是有效的整数"}), 400
+            
+        # 验证SQL
         sql = (data.get('sql') or '').strip()
+        if not sql:
+            return jsonify({"error": "SQL语句不能为空"}), 400
+        if len(sql) > 10000:  # 限制SQL长度
+            return jsonify({"error": "SQL语句长度不能超过10000个字符"}), 400
+            
+        # 验证数据库名称
         database = (data.get('database') or '').strip()
+        if not database:
+            return jsonify({"error": "数据库名称不能为空"}), 400
+        if len(database) > 64:  # MySQL数据库名称长度限制
+            return jsonify({"error": "数据库名称长度不能超过64个字符"}), 400
+        # 简单的数据库名称格式验证（防止SQL注入）
+        import re
+        if not re.match(r'^[a-zA-Z0-9_]+$', database):
+            return jsonify({"error": "数据库名称只能包含字母、数字和下划线"}), 400
+            
         # 后端默认策略：不进行数据采样，启用执行计划分析
         enable_sampling = False
         enable_explain = True
         sample_rows = None
-
-        if not instance_id or not sql:
-            return jsonify({"error": "缺少必要参数: instanceId, sql"}), 400
-        if not database:
-            return jsonify({"error": "缺少必要参数: database"}), 400
 
         inst = Instance.query.get(instance_id)
         if not inst:

@@ -3,7 +3,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from 'antd';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
-// import PageTransition from './components/PageTransition'; // 移除过渡以保证不卸载组件
 import InstanceOverview from './pages/InstanceOverview';
 import InstanceManagement from './pages/InstanceManagement';
 import SQLOptimization from './pages/SQLOptimization';

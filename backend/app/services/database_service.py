@@ -32,6 +32,7 @@ class DatabaseService:
         if not pymysql:
             return False, [], "MySQL驱动不可用"
         
+        conn = None
         try:
             # 建立MySQL连接
             conn = pymysql.connect(
@@ -53,12 +54,21 @@ class DatabaseService:
                 # 提取数据库名称，包含系统数据库
                 databases = [db_name for (db_name,) in results]
                 
-                conn.close()
                 return True, sorted(databases), "获取成功"
                 
+        except pymysql.Error as e:
+            logger.error(f"MySQL连接错误 (实例ID: {instance.id}): {e}")
+            return False, [], f"MySQL连接失败: {str(e)}"
         except Exception as e:
-            logger.error(f"获取数据库列表失败 (实例ID: {instance.id}): {e}")
-            return False, [], f"连接或查询失败: {e}"
+            logger.error(f"获取数据库列表异常 (实例ID: {instance.id}): {e}")
+            return False, [], f"查询异常: {str(e)}"
+        finally:
+            # 确保连接被正确关闭
+            if conn:
+                try:
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"关闭数据库连接时出错: {e}")
 
 
 # 全局实例

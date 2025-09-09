@@ -5,6 +5,10 @@ app = create_app()
 app.app_context().push()
 
 instances = Instance.query.all()
-print(f"总共有 {len(instances)} 个实例:")
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+logger.info(f"总共有 {len(instances)} 个实例:")
 for i in instances:
-    print(f"ID: {i.id}, Name: {i.instance_name}, Host: {i.host}:{i.port}, Status: {i.status}")
+    logger.info(f"ID: {i.id}, Name: {i.instance_name}, Host: {i.host}:{i.port}, Status: {i.status}")

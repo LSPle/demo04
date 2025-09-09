@@ -17,11 +17,50 @@ def create_instance():
     try:
         data = request.get_json()
         
-        # 验证必需字段（移除version）
+        if not data:
+            return jsonify({'error': '请求体不能为空'}), 400
+        
+        # 验证必需字段
         required_fields = ['name', 'host', 'port', 'type']
         for field in required_fields:
             if field not in data or not data[field]:
                 return jsonify({'error': f'缺少必需字段: {field}'}), 400
+        
+        # 验证字段格式和范围
+        if not isinstance(data['name'], str) or len(data['name'].strip()) == 0:
+            return jsonify({'error': '实例名称必须是非空字符串'}), 400
+        if len(data['name'].strip()) > 100:
+            return jsonify({'error': '实例名称长度不能超过100个字符'}), 400
+            
+        if not isinstance(data['host'], str) or len(data['host'].strip()) == 0:
+            return jsonify({'error': '主机地址必须是非空字符串'}), 400
+            
+        try:
+            port = int(data['port'])
+            if port < 1 or port > 65535:
+                return jsonify({'error': '端口号必须在1-65535范围内'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': '端口号必须是有效的整数'}), 400
+            
+        if data['type'] not in ['MySQL', 'PostgreSQL', 'Oracle', 'SQL Server']:
+            return jsonify({'error': '不支持的数据库类型'}), 400
+            
+        # 验证可选字段
+        if 'cpuUsage' in data:
+            try:
+                cpu_usage = float(data['cpuUsage'])
+                if cpu_usage < 0 or cpu_usage > 100:
+                    return jsonify({'error': 'CPU使用率必须在0-100范围内'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'CPU使用率必须是有效的数字'}), 400
+                
+        if 'memoryUsage' in data:
+            try:
+                memory_usage = float(data['memoryUsage'])
+                if memory_usage < 0 or memory_usage > 100:
+                    return jsonify({'error': '内存使用率必须在0-100范围内'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': '内存使用率必须是有效的数字'}), 400
         
         # 检查实例名是否已存在
         existing = Instance.query.filter_by(instance_name=data['name']).first()
@@ -72,6 +111,48 @@ def update_instance(instance_id):
     try:
         instance = Instance.query.get_or_404(instance_id)
         data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': '请求体不能为空'}), 400
+        
+        # 验证字段格式和范围
+        if 'name' in data:
+            if not isinstance(data['name'], str) or len(data['name'].strip()) == 0:
+                return jsonify({'error': '实例名称必须是非空字符串'}), 400
+            if len(data['name'].strip()) > 100:
+                return jsonify({'error': '实例名称长度不能超过100个字符'}), 400
+                
+        if 'host' in data:
+            if not isinstance(data['host'], str) or len(data['host'].strip()) == 0:
+                return jsonify({'error': '主机地址必须是非空字符串'}), 400
+                
+        if 'port' in data:
+            try:
+                port = int(data['port'])
+                if port < 1 or port > 65535:
+                    return jsonify({'error': '端口号必须在1-65535范围内'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': '端口号必须是有效的整数'}), 400
+                
+        if 'type' in data:
+            if data['type'] not in ['MySQL', 'PostgreSQL', 'Oracle', 'SQL Server']:
+                return jsonify({'error': '不支持的数据库类型'}), 400
+                
+        if 'cpuUsage' in data:
+            try:
+                cpu_usage = float(data['cpuUsage'])
+                if cpu_usage < 0 or cpu_usage > 100:
+                    return jsonify({'error': 'CPU使用率必须在0-100范围内'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'CPU使用率必须是有效的数字'}), 400
+                
+        if 'memoryUsage' in data:
+            try:
+                memory_usage = float(data['memoryUsage'])
+                if memory_usage < 0 or memory_usage > 100:
+                    return jsonify({'error': '内存使用率必须在0-100范围内'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': '内存使用率必须是有效的数字'}), 400
         
         # 检查实例名是否与其他实例冲突
         if 'name' in data and data['name'] != instance.instance_name:

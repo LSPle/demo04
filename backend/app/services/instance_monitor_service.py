@@ -34,6 +34,7 @@ class InstanceMonitorService:
         if not pymysql:
             return False, "MySQL驱动不可用"
         
+        conn = None
         try:
             # 尝试建立MySQL连接
             conn = pymysql.connect(
@@ -52,12 +53,21 @@ class InstanceMonitorService:
                 cursor.execute("SELECT 1")
                 cursor.fetchone()
             
-            conn.close()
             return True, "连接正常"
             
+        except pymysql.Error as e:
+            logger.warning(f"MySQL连接错误 (ID: {instance.id}, {instance.host}:{instance.port}): {e}")
+            return False, f"MySQL连接失败: {str(e)}"
         except Exception as e:
-            logger.warning(f"实例连接检测失败 (ID: {instance.id}, {instance.host}:{instance.port}): {e}")
-            return False, f"连接失败: {str(e)}"
+            logger.error(f"实例连接检测异常 (ID: {instance.id}, {instance.host}:{instance.port}): {e}")
+            return False, f"连接检测异常: {str(e)}"
+        finally:
+            # 确保连接被正确关闭
+            if conn:
+                try:
+                    conn.close()
+                except Exception as e:
+                    logger.warning(f"关闭数据库连接时出错: {e}")
 
     def update_instance_status(self, instance: Instance, is_connected: bool, message: str = "") -> bool:
         """

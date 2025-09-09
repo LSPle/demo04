@@ -35,13 +35,13 @@ class WebSocketService:
                 self.monitoring_thread.daemon = True
                 self.monitoring_thread.start()
                 logger.info("实时监控线程已启动")
-                print("✅ 实时监控线程已启动")  # 添加控制台输出
+                logger.info("实时监控线程已启动")
             else:
                 logger.info("监控线程已在运行")
-                print("ℹ️  监控线程已在运行")
+                logger.info("监控线程已在运行")
         except Exception as e:
             logger.error(f"启动监控线程失败: {e}")
-            print(f"❌ 启动监控线程失败: {e}")
+            logger.error(f"启动监控线程失败: {e}")
             
     def stop_monitoring(self):
         """停止实时监控线程"""
@@ -111,14 +111,14 @@ class WebSocketService:
         if self.socketio:
             self.socketio.emit('instance_status_change', instance_data)
             logger.info(f"发送实例状态变化事件: {instance_data['name']} -> {instance_data['status']}")
-            print(f"📡 发送实例状态变化: {instance_data['name']} -> {instance_data['status']}")
+            logger.debug(f"发送实例状态变化: {instance_data['name']} -> {instance_data['status']}")
             
     def _emit_status_summary(self, summary: Dict[str, Any]):
         """发送状态汇总事件"""
         if self.socketio:
             self.socketio.emit('status_summary_update', summary)
             logger.info(f"发送状态汇总更新: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
-            print(f"📊 发送状态汇总: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
+            logger.debug(f"发送状态汇总: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
             
     def _calculate_summary(self, current_status: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """计算状态汇总信息"""

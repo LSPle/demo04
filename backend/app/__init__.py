@@ -82,7 +82,9 @@ def register_websocket_events():
     
     @socketio.on('connect')
     def handle_connect():
-        print('客户端已连接')
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info('客户端已连接')
         # 启动监控服务
         websocket_service.start_monitoring()
         # 发送当前状态
@@ -90,7 +92,9 @@ def register_websocket_events():
         
     @socketio.on('disconnect')
     def handle_disconnect():
-        print('客户端已断开连接')
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info('客户端已断开连接')
         
     @socketio.on('request_status_update')
     def handle_status_request():
