@@ -45,12 +45,13 @@ const InstanceManagement = () => {
     } catch (error) {
       console.error('获取实例数据失败:', error);
       message.error('获取实例数据失败，请检查后端服务');
-      // 设置所有实例状态为"未连接"
-      const disconnectedInstances = instanceData.map(instance => ({
+      
+      // 当API获取失败时，将现有实例状态设置为已关闭
+      const closedInstances = instanceData.map(instance => ({
         ...instance,
-        status: 'disconnected'
+        status: 'closed'
       }));
-      setInstanceData(disconnectedInstances);
+      setInstanceData(closedInstances);
     } finally {
       setLoading(false);
     }
@@ -66,9 +67,9 @@ const InstanceManagement = () => {
       running: { color: 'success', text: '运行中' },
       warning: { color: 'warning', text: '需要优化' },
       error: { color: 'error', text: '异常' },
-      disconnected: { color: 'default', text: '未连接' }
+      closed: { color: 'default', text: '已关闭' }
     };
-    const config = statusMap[status] || { color: 'default', text: '未连接' };
+    const config = statusMap[status] || { color: 'default', text: '未知' };
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
