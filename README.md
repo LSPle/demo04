@@ -56,19 +56,23 @@ npm test
 ## 项目结构
 
 ```
-src/
-├── components/          # 公共组件
-│   ├── Layout/         # 布局组件
-│   └── PageTransition/ # 页面过渡动画
-├── pages/              # 页面组件
-│   ├── InstanceOverview.js     # 实例概览
-│   ├── InstanceManagement.js   # 实例管理
-│   ├── SQLOptimization.js      # SQL优化
-│   ├── SQLConsole.js           # SQL窗口
-│   └── ConfigOptimization.js   # 配置优化
-├── App.js              # 主应用组件
-├── index.js            # 应用入口
-└── index.css           # 全局样式
+front/
+├── src/
+│   ├── components/          # 公共组件
+│   │   ├── Layout/         # 布局组件
+│   │   └── PageTransition/ # 页面过渡动画
+│   ├── pages/              # 页面组件
+│   │   ├── InstanceOverview.js     # 实例概览
+│   │   ├── InstanceManagement.js   # 实例管理
+│   │   ├── SQLOptimization.js      # SQL优化
+│   │   ├── SQLConsole.js           # SQL窗口
+│   │   └── ConfigOptimization.js   # 配置优化
+│   ├── App.js              # 主应用组件
+│   └── index.js            # 应用入口
+├── public/             # 静态资源
+├── package.json        # 前端依赖配置
+└── package-lock.json   # 依赖锁定文件
+backend/                # 后端代码
 ```
 
 ## 主要功能模块
