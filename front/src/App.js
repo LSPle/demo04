@@ -11,6 +11,7 @@ import ConfigOptimization from './pages/ConfigOptimization';
 import Login from './pages/Login';
 import ArchitectureOptimization from './pages/ArchitectureOptimization';
 import SlowQueryLogs from './pages/SlowQueryLogs';
+import { InstanceProvider } from './contexts/InstanceContext';
 
 const { Content } = Layout;
 
@@ -102,9 +103,11 @@ const App = () => {
 
   // 其他页面使用AppLayout包装
   return (
-    <AppLayout>
-      {keepAliveViews}
-    </AppLayout>
+    <InstanceProvider>
+      <AppLayout>
+        {keepAliveViews}
+      </AppLayout>
+    </InstanceProvider>
   );
 };
 

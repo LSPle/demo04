@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Select, Table, Form, Input, DatePicker, Space, Button, Tag, message, Tooltip, Modal } from 'antd';
 import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
 import dayjs from 'dayjs';
+import { useInstances } from '../contexts/InstanceContext';
 
 const { RangePicker } = DatePicker;
 
 const SlowQueryLogs = () => {
-  const [instances, setInstances] = useState([]);
+  const { getRunningInstanceOptions } = useInstances();
+  const instances = getRunningInstanceOptions();
   const [instanceId, setInstanceId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState({ items: [], total: 0, overview: {} });
@@ -15,18 +17,14 @@ const SlowQueryLogs = () => {
   const [filters, setFilters] = useState({ keyword: '', db: '', user_host: '', range: [] });
   const [sqlPreview, setSqlPreview] = useState({ open: false, sql: '' });
 
-  // 加载实例列表
+  // 当实例选择无效时重置
   useEffect(() => {
-    fetch(API_ENDPOINTS.INSTANCES)
-      .then(res => res.json())
-      .then(json => {
-        const list = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
-        // 仅展示运行中的实例
-        const runningInstances = list.filter(inst => inst.status === 'running');
-        setInstances(runningInstances);
-      })
-      .catch(() => {});
-  }, []);
+    if (instanceId && !instances.some(inst => String(inst.id) === String(instanceId))) {
+      setInstanceId(null);
+      setData({ items: [], total: 0, overview: {} });
+      message.warning('所选实例已不可用，选择已重置');
+    }
+  }, [instanceId, instances]);
 
   const fetchSlowLogs = async (id, p = page, ps = pageSize, f = filters) => {
     if (!id) return;
@@ -185,7 +183,7 @@ const SlowQueryLogs = () => {
             <Select
               style={{ width: 320 }}
               placeholder="请选择实例"
-              options={instances.map(i => ({ value: i.id, label: `${i.instanceName} (${i.host}:${i.port})` }))}
+              options={instances}
               value={instanceId}
               onChange={setInstanceId}
               showSearch

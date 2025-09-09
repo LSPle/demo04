@@ -12,12 +12,14 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
+import { useInstances } from '../contexts/InstanceContext';
 const { TextArea } = Input;
 const { Option } = Select;
 
 const SQLConsole = () => {
   // 实例与数据库/表
-  const [instanceOptions, setInstanceOptions] = useState([]);
+  const { getRunningInstanceOptions } = useInstances();
+  const instanceOptions = getRunningInstanceOptions();
   const [selectedInstance, setSelectedInstance] = useState('');
   const [selectedDatabase, setSelectedDatabase] = useState('');
   const [treeData, setTreeData] = useState([]); // [{title, key, children, isLeaf, type: 'db'|'table', database, tableName}]
@@ -38,29 +40,16 @@ const SQLConsole = () => {
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [schemaData, setSchemaData] = useState(null);
 
-  // 加载实例列表
+  // 当实例选择无效时重置
   useEffect(() => {
-    const fetchInstances = async () => {
-      try {
-        const res = await fetch(API_ENDPOINTS.INSTANCES);
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || '获取实例列表失败');
-        const list = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
-        // 仅展示运行中的实例
-        const filteredList = list.filter(inst => inst.status === 'running');
-        const options = filteredList.map((inst) => ({
-          value: String(inst.id),
-          label: `${inst.instanceName} (${inst.dbType}) ${inst.host}:${inst.port}`
-        }));
-        setInstanceOptions(options);
-      } catch (e) {
-        console.error(e);
-        setInstanceOptions([]);
-        message.error(`获取实例列表失败：${e.message}`);
-      }
-    };
-    fetchInstances();
-  }, []);
+    if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
+      setSelectedInstance('');
+      setTreeData([]);
+      setExpandedKeys([]);
+      setSelectedDatabase('');
+      message.warning('所选实例已不可用，选择已重置');
+    }
+  }, [selectedInstance, instanceOptions]);
 
 
   const fetchDatabases = async (instId) => {

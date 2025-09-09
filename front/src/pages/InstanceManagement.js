@@ -9,6 +9,7 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
+import { useInstances } from '../contexts/InstanceContext';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -20,6 +21,7 @@ const InstanceManagement = () => {
   const [loading, setLoading] = useState(true);
   const [form] = Form.useForm();
   const [editingInstance, setEditingInstance] = useState(null);
+  const { onInstanceAdded, onInstanceDeleted, onInstanceUpdated } = useInstances();
 
   // 从后端获取实例数据
   const fetchInstanceData = async () => {
@@ -110,6 +112,7 @@ const InstanceManagement = () => {
           
           message.success('删除成功');
           fetchInstanceData(); // 刷新数据
+          onInstanceDeleted(); // 通知其他组件实例已删除
         } catch (error) {
           console.error('删除失败:', error);
           message.error(error.message || '删除失败，请稍后重试');
@@ -170,8 +173,16 @@ const InstanceManagement = () => {
       message.success(result.message || '保存成功');
       setIsModalVisible(false);
       form.resetFields();
+      const wasEditing = !!editingInstance;
       setEditingInstance(null);
       fetchInstanceData(); // 刷新数据
+      
+      // 通知其他组件实例状态已变更
+      if (wasEditing) {
+        onInstanceUpdated();
+      } else {
+        onInstanceAdded();
+      }
       
     } catch (error) {
       console.error('保存失败:', error);

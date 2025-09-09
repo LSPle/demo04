@@ -9,6 +9,7 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
+import { useInstances } from '../contexts/InstanceContext';
 
 const { Option } = Select;
 
@@ -18,40 +19,17 @@ const ConfigOptimization = () => {
   const [configData, setConfigData] = useState(null);
   const [slowData, setSlowData] = useState(null);
   const [isSlowAnalyzing, setIsSlowAnalyzing] = useState(false);
-  const [instanceOptions, setInstanceOptions] = useState([]);
+  const { getRunningInstanceOptions } = useInstances();
+  const instanceOptions = getRunningInstanceOptions();
 
+  // 当实例选择无效时重置
   useEffect(() => {
-    const fetchInstances = async () => {
-      try {
-        const response = await fetch(API_ENDPOINTS.INSTANCES);
-        if (!response.ok) throw new Error('API响应失败');
-        const data = await response.json();
-        const options = (Array.isArray(data) ? data : [])
-          // 仅展示运行中的实例
-          .filter(inst => inst.status === 'running')
-          .map(inst => ({
-            value: String(inst.id),
-            label: `${inst.instanceName} (${inst.dbType}) ${inst.host}:${inst.port}`,
-            status: inst.status
-          }));
-        setInstanceOptions(options);
-        // 如果当前选择的实例已不可用，则重置选择
-        if (selectedInstance && !options.some(o => o.value === selectedInstance)) {
-          setSelectedInstance('');
-          message.warning('所选实例已不可用，选择已重置');
-        }
-      } catch (err) {
-        console.error('获取实例列表失败:', err);
-        message.error('获取数据库实例列表失败，请检查后端服务');
-        setInstanceOptions([]);
-        if (selectedInstance) setSelectedInstance('');
-      }
-    };
-
-    fetchInstances();
-    const interval = setInterval(fetchInstances, 10000); // 10秒刷新一次，实时更新实例状态
-    return () => clearInterval(interval);
-  }, [selectedInstance]);
+    if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
+      setSelectedInstance('');
+      setConfigData(null);
+      message.warning('所选实例已不可用，选择已重置');
+    }
+  }, [selectedInstance, instanceOptions]);
 
   // 百分比与比值解析工具
   const parsePercent = (s) => {

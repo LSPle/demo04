@@ -6,6 +6,7 @@ import {
   BulbOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
+import { useInstances } from '../contexts/InstanceContext';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -73,33 +74,19 @@ const SQLOptimization = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // 数据库实例选项
-  const [instanceOptions, setInstanceOptions] = useState([]);
+  const { getRunningInstanceOptions } = useInstances();
+  const instanceOptions = getRunningInstanceOptions();
   // 数据库选项
   const [databaseOptions, setDatabaseOptions] = useState([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
+  // 当实例选择无效时重置
   useEffect(() => {
-    const fetchInstances = async () => {
-      try {
-        const response = await fetch(API_ENDPOINTS.INSTANCES);
-        if (!response.ok) throw new Error('API响应失败');
-        const data = await response.json();
-        const options = (Array.isArray(data) ? data : [])
-          // 仅展示运行中的实例
-          .filter(inst => inst.status === 'running')
-          .map(inst => ({
-            value: String(inst.id),
-            label: `${inst.instanceName} (${inst.dbType}) ${inst.host}:${inst.port}`
-          }));
-        setInstanceOptions(options);
-      } catch (err) {
-        console.error('获取实例列表失败:', err);
-        message.error('获取数据库实例列表失败，请检查后端服务');
-        setInstanceOptions([]);
-      }
-    };
-    fetchInstances();
-  }, []);
+    if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
+      setSelectedInstance('');
+      message.warning('所选实例已不可用，选择已重置');
+    }
+  }, [selectedInstance, instanceOptions]);
 
   // 当选择实例时，获取该实例的数据库列表
   useEffect(() => {
