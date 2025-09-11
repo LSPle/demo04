@@ -1,5 +1,6 @@
 import logging
 import re
+import datetime
 from typing import Any, Dict, List, Tuple, Optional
 
 try:
@@ -108,8 +109,7 @@ class SlowLogService:
                                 if val is None:
                                     return ''
                                 try:
-                                    import datetime as _dt
-                                    if isinstance(val, (_dt.datetime,)):
+                                    if isinstance(val, (datetime.datetime,)):
                                         return val.strftime('%Y-%m-%d %H:%M:%S')
                                 except Exception:
                                     pass
@@ -303,8 +303,7 @@ class SlowLogService:
                         if val is None:
                             return ''
                         try:
-                            import datetime as _dt
-                            if isinstance(val, (_dt.datetime,)):
+                            if isinstance(val, (datetime.datetime,)):
                                 return val.strftime('%Y-%m-%d %H:%M:%S')
                         except Exception:
                             pass

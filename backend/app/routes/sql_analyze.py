@@ -3,6 +3,9 @@ from ..models import Instance
 from ..services.deepseek_service import get_deepseek_client
 from ..services.table_analyzer_service import table_analyzer_service
 import pymysql
+import logging
+
+logger = logging.getLogger(__name__)
 
 sql_analyze_bp = Blueprint('sql_analyze', __name__)
 
@@ -70,12 +73,26 @@ def analyze_sql():
             context_summary = context_summary + f"\n上下文生成失败: {str(e)}"
 
         client = get_deepseek_client()
+        logger.info(f"DeepSeek客户端配置: enabled={client.enabled}, api_key_set={bool(client.api_key)}, base_url={client.base_url}")
+        
         # 使用增强的分析接口，拿到分析文本与可能的重写SQL
-        llm_result = client.analyze_sql(sql, context_summary)
+        try:
+            llm_result = client.analyze_sql(sql, context_summary)
+            logger.info(f"DeepSeek分析结果: {bool(llm_result)}")
+        except Exception as llm_e:
+            logger.error(f"DeepSeek分析异常: {llm_e}")
+            llm_result = None
 
         if not llm_result:
+            logger.warning("DeepSeek分析失败，尝试降级到重写功能")
             # 降级：维持与旧版兼容，仅尝试重写SQL
-            rewritten = client.rewrite_sql(sql, context_summary)
+            try:
+                rewritten = client.rewrite_sql(sql, context_summary)
+                logger.info(f"DeepSeek重写结果: {bool(rewritten)}")
+            except Exception as rewrite_e:
+                logger.error(f"DeepSeek重写异常: {rewrite_e}")
+                rewritten = None
+            
             return jsonify({
                 "analysis": None,
                 "rewrittenSql": rewritten if rewritten else None

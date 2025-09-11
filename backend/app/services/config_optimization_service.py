@@ -280,8 +280,7 @@ class DeepSeekConfigAdvisor:
         slowlog_summary = collected.get('slowlogSummary')
         if slowlog_summary:
             try:
-                import json as _json
-                prompt = prompt + f"\n【慢日志摘要】:\n{_json.dumps(slowlog_summary, ensure_ascii=False)}\n"
+                prompt = prompt + f"\n【慢日志摘要】:\n{json.dumps(slowlog_summary, ensure_ascii=False)}\n"
             except Exception:
                 pass
         payload = {

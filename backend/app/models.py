@@ -38,9 +38,7 @@ class Instance(db.Model):
     password = db.Column(db.String(255), nullable=True)  # 注意：仅用于演示，生产请勿明文存储
     db_type = db.Column(db.String(64), nullable=False, default='MySQL')
     status = db.Column(db.String(32), nullable=False, default='running')  # running|warning|error
-    cpu_usage = db.Column(db.Integer, nullable=False, default=0)
-    memory_usage = db.Column(db.Integer, nullable=False, default=0)
-    storage = db.Column(db.String(128), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
@@ -54,8 +52,6 @@ class Instance(db.Model):
             'password': self.password,
             'dbType': self.db_type,
             'status': self.status,
-            'cpuUsage': self.cpu_usage,
-            'memoryUsage': self.memory_usage,
-            'storage': self.storage,
+
             'createTime': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
         }

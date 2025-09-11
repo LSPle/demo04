@@ -6,10 +6,12 @@ import {
   FilterOutlined,
   EditOutlined,
   DeleteOutlined,
-  DatabaseOutlined
+  DatabaseOutlined,
+  WifiOutlined
 } from '@ant-design/icons';
 import { API_ENDPOINTS } from '../config/api';
 import { useInstances } from '../contexts/InstanceContext';
+import websocketService from '../services/websocketService';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -21,6 +23,7 @@ const InstanceManagement = () => {
   const [loading, setLoading] = useState(true);
   const [form] = Form.useForm();
   const [editingInstance, setEditingInstance] = useState(null);
+  const [wsConnected, setWsConnected] = useState(false);
   const { onInstanceAdded, onInstanceDeleted, onInstanceUpdated } = useInstances();
 
   // 从后端获取实例数据
@@ -68,10 +71,70 @@ const InstanceManagement = () => {
     fetchInstanceData();
   }, []);
 
+  // WebSocket事件处理
+  useEffect(() => {
+    // 连接WebSocket
+    websocketService.connect();
+    
+    // 监听连接状态变化
+    const handleConnectionChange = () => {
+      const status = websocketService.getConnectionStatus();
+      setWsConnected(status.isConnected);
+    };
+    
+    // 监听实例状态变化
+    const handleInstanceStatusChange = (data) => {
+      console.log('收到实例状态变化:', data);
+      message.info(`实例 ${data.name} 状态变更为: ${data.status === 'running' ? '运行中' : '异常'}`);
+      
+      // 更新单个实例状态
+      setInstanceData(prevData => 
+        prevData.map(instance => 
+          instance.key === data.id.toString() 
+            ? { ...instance, status: data.status }
+            : instance
+        )
+      );
+    };
+    
+    // 监听所有实例状态更新
+    const handleInstancesStatusUpdate = (data) => {
+      console.log('收到所有实例状态更新:', data);
+      if (data.instances) {
+        const formattedData = data.instances.map(instance => ({
+          key: instance.id.toString(),
+          name: instance.name,
+          ip: `${instance.host}:${instance.port}`,
+          type: instance.dbType || 'MySQL',
+          status: instance.status,
+          createTime: instance.createTime,
+          username: instance.username,
+          password: instance.password
+        }));
+        setInstanceData(formattedData);
+      }
+    };
+    
+    // 注册事件监听器
+    websocketService.on('instanceStatusChange', handleInstanceStatusChange);
+    websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
+    
+    // 定期检查连接状态
+    const statusInterval = setInterval(handleConnectionChange, 1000);
+    
+    // 清理函数
+    return () => {
+      clearInterval(statusInterval);
+      websocketService.off('instanceStatusChange', handleInstanceStatusChange);
+      websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
+      // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
+    };
+  }, []);
+
   const getStatusTag = (status) => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
-      warning: { color: 'warning', text: '需要优化' },
+      warning: { color: 'warning', text: '警告' },
       error: { color: 'error', text: '异常' },
       closed: { color: 'default', text: '已关闭' }
     };
@@ -262,8 +325,26 @@ const InstanceManagement = () => {
     <div>
       {/* 页面标题 */}
       <div className="page-header">
-        <h1>实例管理</h1>
-        <p>添加、删除和配置数据库实例</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1>实例管理</h1>
+            <p>添加、删除和配置数据库实例</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <WifiOutlined 
+              style={{ 
+                color: wsConnected ? '#52c41a' : '#ff4d4f',
+                fontSize: '16px'
+              }} 
+            />
+            <span style={{ 
+              color: wsConnected ? '#52c41a' : '#ff4d4f',
+              fontSize: '14px'
+            }}>
+              {wsConnected ? '实时连接' : '连接断开'}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* 操作栏 */}

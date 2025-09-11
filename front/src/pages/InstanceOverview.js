@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Progress, Space, Button, message } from 'antd';
+import { Card, Table, Tag, Space, Button, message } from 'antd';
 import {
   DatabaseOutlined,
   PlayCircleOutlined,
-  WarningOutlined,
   ExclamationCircleOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
   ReloadOutlined,
   WifiOutlined
 } from '@ant-design/icons';
@@ -22,38 +19,25 @@ const InstanceOverview = () => {
       title: '总实例数',
       value: 0,
       color: '#1890ff',
-      icon: <DatabaseOutlined />,
-      trend: { text: '—', type: 'up' }
+      icon: <DatabaseOutlined />
     },
     {
       title: '运行中',
       value: 0,
       color: '#52c41a',
-      icon: <PlayCircleOutlined />,
-      trend: { text: '—', type: 'up' }
-    },
-    {
-      title: '需要优化',
-      value: 0,
-      color: '#faad14',
-      icon: <WarningOutlined />,
-      trend: { text: '—', type: 'down' }
+      icon: <PlayCircleOutlined />
     },
     {
       title: '异常实例',
       value: 0,
       color: '#ff4d4f',
-      icon: <ExclamationCircleOutlined />,
-      trend: { text: '—', type: 'down' }
+      icon: <ExclamationCircleOutlined />
     }
   ]);
   
   const [wsConnected, setWsConnected] = useState(false);
 
-  // 模拟后端API数据（包含指定的测试实例）
-  const mockApiData = [
-    // 已移除：不再使用前端模拟数据，避免展示非真实实例
-  ];
+
 
   // 从后端获取实例数据（包含实时指标）
   const fetchInstanceData = async () => {
@@ -124,9 +108,6 @@ const InstanceOverview = () => {
       ip: `${instance.host}:${instance.port}`,
       type: instance.dbType,
       status: instance.status,
-      cpuUsage: instance.cpuUsage,
-      memoryUsage: instance.memoryUsage,
-      storage: instance.storage,
       connectionInfo: {
         host: instance.host,
         port: instance.port,
@@ -145,11 +126,10 @@ const InstanceOverview = () => {
   const updateStatsData = (instances) => {
     const totalCount = instances.length;
     const runningCount = instances.filter(item => item.status === 'running').length;
-    const warningCount = instances.filter(item => item.status === 'warning').length;
     const errorCount = instances.filter(item => item.status === 'error' || item.status === 'closed').length;
 
     setStatsData(prevStats => prevStats.map((stat, index) => {
-      const values = [totalCount, runningCount, warningCount, errorCount];
+      const values = [totalCount, runningCount, errorCount];
       return {
         ...stat,
         value: values[index]
@@ -187,7 +167,7 @@ const InstanceOverview = () => {
     const handleStatusSummaryUpdate = (data) => {
       console.log('收到状态汇总更新:', data);
       setStatsData(prevStats => prevStats.map((stat, index) => {
-        const values = [data.total, data.running, data.warning || 0, data.error];
+        const values = [data.total, data.running, data.error];
         return {
           ...stat,
           value: values[index]
@@ -203,11 +183,8 @@ const InstanceOverview = () => {
           key: instance.id,
           name: instance.name,
           ip: `${instance.host}:${instance.port}`,
-          type: 'MySQL', // 默认类型
+          type: instance.dbType || 'MySQL',
           status: instance.status,
-          cpuUsage: Math.floor(Math.random() * 100), // 模拟数据
-          memoryUsage: Math.floor(Math.random() * 100), // 模拟数据
-          storage: Math.floor(Math.random() * 100), // 模拟数据
           connectionInfo: {
             host: instance.host,
             port: instance.port
@@ -247,7 +224,7 @@ const InstanceOverview = () => {
   const getStatusTag = (status) => {
     const statusMap = {
       running: { color: 'success', text: '运行中' },
-      warning: { color: 'warning', text: '需要优化' },
+      warning: { color: 'warning', text: '警告' },
       error: { color: 'error', text: '异常' },
       closed: { color: 'default', text: '已关闭' }
     };
@@ -255,38 +232,32 @@ const InstanceOverview = () => {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  const getProgressColor = (value) => {
-    if (value >= 90) return '#ff4d4f';
-    if (value >= 70) return '#faad14';
-    return '#52c41a';
-  };
-
   const columns = [
     {
       title: '实例名称',
       dataIndex: 'name',
       key: 'name',
-      render: (text, record) => (
-        <Space>
-          <DatabaseOutlined style={{ color: '#1890ff' }} />
-          <div>
-            <div style={{ fontWeight: 500 }}>{text}</div>
-            <div style={{ fontSize: 12, color: '#8c8c8c' }}>{record.ip}</div>
-          </div>
-        </Space>
-      )
+      width: 200,
+      ellipsis: true,
     },
     {
-      title: '类型',
-      dataIndex: 'type',
-      key: 'type'
+      title: 'IP地址',
+      dataIndex: 'ip',
+      key: 'ip',
+      width: 150,
     },
-    // 移除版本列
+    {
+      title: '数据库类型',
+      dataIndex: 'type',
+      key: 'type',
+      width: 120,
+    },
     {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: getStatusTag
+      width: 100,
+      render: (status) => getStatusTag(status),
     },
   ];
 
@@ -347,11 +318,6 @@ const InstanceOverview = () => {
                     textShadow: '0 2px 4px rgba(0,0,0,0.1)'
                   }}>
                     {stat.value}
-                  </div>
-                  <div style={{ fontSize: 12, color: '#8c8c8c', display: 'flex', alignItems: 'center' }}>
-                    {stat.trend.text}
-                    {stat.trend.type === 'up' && <ArrowUpOutlined style={{ color: '#52c41a', marginLeft: 4 }} />}
-                    {stat.trend.type === 'down' && <ArrowDownOutlined style={{ color: '#ff4d4f', marginLeft: 4 }} />}
                   </div>
                 </div>
                 <div style={{ 

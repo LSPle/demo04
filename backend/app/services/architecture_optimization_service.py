@@ -1,4 +1,5 @@
 import logging
+import json
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 
@@ -310,14 +311,13 @@ def llm_advise_architecture(overview: Dict[str, Any], replication: Dict[str, Any
         data = resp.json()
         content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
         # 尝试严格JSON解析
-        import json as _json
         try:
-            obj = _json.loads(content)
+            obj = json.loads(content)
         except Exception:
             start = content.find('{'); end = content.rfind('}')
             if start != -1 and end != -1 and end > start:
                 try:
-                    obj = _json.loads(content[start:end+1])
+                    obj = json.loads(content[start:end+1])
                 except Exception:
                     return None
             else:

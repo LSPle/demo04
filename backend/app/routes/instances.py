@@ -45,22 +45,7 @@ def create_instance():
         if data['type'] not in ['MySQL', 'PostgreSQL', 'Oracle', 'SQL Server']:
             return jsonify({'error': '不支持的数据库类型'}), 400
             
-        # 验证可选字段
-        if 'cpuUsage' in data:
-            try:
-                cpu_usage = float(data['cpuUsage'])
-                if cpu_usage < 0 or cpu_usage > 100:
-                    return jsonify({'error': 'CPU使用率必须在0-100范围内'}), 400
-            except (ValueError, TypeError):
-                return jsonify({'error': 'CPU使用率必须是有效的数字'}), 400
-                
-        if 'memoryUsage' in data:
-            try:
-                memory_usage = float(data['memoryUsage'])
-                if memory_usage < 0 or memory_usage > 100:
-                    return jsonify({'error': '内存使用率必须在0-100范围内'}), 400
-            except (ValueError, TypeError):
-                return jsonify({'error': '内存使用率必须是有效的数字'}), 400
+
         
         # 检查实例名是否已存在
         existing = Instance.query.filter_by(instance_name=data['name']).first()
@@ -78,7 +63,7 @@ def create_instance():
         if not is_ok:
             return jsonify({'error': f'连接校验失败：{msg}'}), 400
         
-        # 创建新实例（移除version）
+        # 创建新实例
         instance = Instance(
             instance_name=data['name'],
             host=data['host'],
@@ -86,10 +71,7 @@ def create_instance():
             username=data.get('username', ''),
             password=data.get('password', ''),
             db_type=data['type'],
-            status=data.get('status', 'running'),
-            cpu_usage=data.get('cpuUsage', 0),
-            memory_usage=data.get('memoryUsage', 0),
-            storage=data.get('storage', '')
+            status=data.get('status', 'running')
         )
         
         db.session.add(instance)
@@ -138,21 +120,7 @@ def update_instance(instance_id):
             if data['type'] not in ['MySQL', 'PostgreSQL', 'Oracle', 'SQL Server']:
                 return jsonify({'error': '不支持的数据库类型'}), 400
                 
-        if 'cpuUsage' in data:
-            try:
-                cpu_usage = float(data['cpuUsage'])
-                if cpu_usage < 0 or cpu_usage > 100:
-                    return jsonify({'error': 'CPU使用率必须在0-100范围内'}), 400
-            except (ValueError, TypeError):
-                return jsonify({'error': 'CPU使用率必须是有效的数字'}), 400
-                
-        if 'memoryUsage' in data:
-            try:
-                memory_usage = float(data['memoryUsage'])
-                if memory_usage < 0 or memory_usage > 100:
-                    return jsonify({'error': '内存使用率必须在0-100范围内'}), 400
-            except (ValueError, TypeError):
-                return jsonify({'error': '内存使用率必须是有效的数字'}), 400
+
         
         # 检查实例名是否与其他实例冲突
         if 'name' in data and data['name'] != instance.instance_name:
@@ -188,12 +156,7 @@ def update_instance(instance_id):
             instance.db_type = data['type']
         if 'status' in data:
             instance.status = data['status']
-        if 'cpuUsage' in data:
-            instance.cpu_usage = data['cpuUsage']
-        if 'memoryUsage' in data:
-            instance.memory_usage = data['memoryUsage']
-        if 'storage' in data:
-            instance.storage = data['storage']
+
         
         db.session.commit()
         
