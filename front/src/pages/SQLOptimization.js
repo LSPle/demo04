@@ -5,7 +5,7 @@ import {
   CodeOutlined,
   BulbOutlined
 } from '@ant-design/icons';
-import { API_ENDPOINTS } from '../config/api';
+import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 
 const { TextArea } = Input;
@@ -101,17 +101,7 @@ const SQLOptimization = () => {
   const fetchDatabases = async (instanceId) => {
     setLoadingDatabases(true);
     try {
-      const response = await fetch(API_ENDPOINTS.INSTANCE_DATABASES(instanceId));
-      if (!response.ok) {
-        if (response.status === 400) {
-          const errorData = await response.json();
-          message.warning(errorData.error || '该实例类型不支持数据库列表');
-          setDatabaseOptions([]);
-          return;
-        }
-        throw new Error('获取数据库列表失败');
-      }
-      const data = await response.json();
+      const data = await apiClient.getInstanceDatabases(instanceId);
       const databases = data.databases || [];
       setDatabaseOptions(databases.map(db => ({ value: db, label: db })));
       
@@ -152,18 +142,7 @@ const SQLOptimization = () => {
         database: selectedDatabase
       };
 
-      const resp = await fetch(API_ENDPOINTS.SQL_ANALYZE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      
-      if (!resp.ok) {
-        const errorData = await resp.json();
-        throw new Error(errorData.error || '分析接口返回错误');
-      }
-      
-      const data = await resp.json();
+      const data = await apiClient.analyzeSql(payload);
       const rewritten = data?.rewrittenSql || null;
       const analysis = data?.analysis || null;
       

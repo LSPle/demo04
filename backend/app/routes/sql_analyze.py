@@ -48,7 +48,12 @@ def analyze_sql():
         enable_explain = True
         sample_rows = None
 
-        inst = Instance.query.get(instance_id)
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({"error": "实例不存在"}), 404
         if (inst.db_type or '').strip() != 'MySQL':
@@ -128,7 +133,12 @@ def execute_sql():
             return jsonify({"error": "仅支持单条 SQL 语句执行，请去除多余的分号或多语句"}), 400
         sql = statements[0]
 
-        inst = Instance.query.get(instance_id)
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({"error": "实例不存在"}), 404
         if (inst.db_type or '').strip() != 'MySQL':

@@ -8,7 +8,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ..\\backend; .\\.venv\\Scripts\\python.exe .\\run.py\"",
+    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ..\\backend; $env:DB_TYPE='mysql'; $env:MYSQL_HOST='127.0.0.1'; $env:MYSQL_PORT='3306'; $env:MYSQL_USER='root'; $env:MYSQL_PASSWORD='123456'; $env:MYSQL_DB='user'; if (Test-Path .\\.venv\\Scripts\\python.exe) { .\\.venv\\Scripts\\python.exe .\\run.py } elseif (Get-Command py -ErrorAction SilentlyContinue) { py -3 .\\run.py } else { python .\\run.py }\"",
     "frontend": "set PORT=3000&& react-scripts start",
     "dev": "npx concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm:backend\" \"npm:frontend\""
   },
@@ -43,5 +43,5 @@
       "last 1 safari version"
     ]
   },
-  "proxy": "http://localhost:5001"
+  "proxy": "http://localhost:5000"
 }

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Select, Button, Space, Descriptions, Tag, Table, message, Divider, Tooltip, Alert } from 'antd';
 import { DatabaseOutlined } from '@ant-design/icons';
-import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
+import API_BASE_URL from '../config/api';
+import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 
 const statusColor = (level) => {
@@ -97,26 +98,7 @@ const ArchitectureOptimization = () => {
     }
     setIsAnalyzing(true);
     try {
-      const response = await fetch(API_ENDPOINTS.ARCH_ANALYZE(selectedInstance), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
-      if (!response.ok) {
-        let errMsg = `HTTP ${response.status}`;
-        try {
-          const errBody = await response.json();
-          if (errBody && errBody.error) errMsg = errBody.error;
-        } catch (_) {
-          try {
-            const txt = await response.text();
-            if (txt) errMsg = txt;
-          } catch (__) {}
-        }
-        console.error('架构分析接口错误:', errMsg);
-        message.error(`架构检查失败：${errMsg}`);
-        return;
-      }
-      const data = await response.json();
+      const data = await apiClient.analyzeArchitecture(selectedInstance);
       const risks = Array.isArray(data.risks) ? data.risks.map((r, idx) => ({ key: r.key || `${r.item || 'risk'}_${idx}`, ...r })) : [];
       setOverview(data.overview || null);
       setReplication(data.replication || null);
@@ -126,18 +108,11 @@ const ArchitectureOptimization = () => {
       // 并行触发慢日志分析
       try {
         setIsSlowAnalyzing(true);
-        const sresp = await fetch(API_ENDPOINTS.SLOWLOG_ANALYZE(selectedInstance), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ top: 15, min_avg_ms: 10, tail_kb: 256 })
-        });
-        if (sresp.ok) {
-          const sdata = await sresp.json();
-          setSlowData(sdata);
-        } else {
-          try { const sj = await sresp.json(); message.warning(`慢日志分析失败：${sj.error || sresp.status}`); } catch { message.warning('慢日志分析失败'); }
-          setSlowData(null);
-        }
+        const sdata = await apiClient.analyzeSlowlog(selectedInstance);
+        setSlowData(sdata);
+      } catch (e) {
+        message.warning('慢日志分析失败');
+        setSlowData(null);
       } finally {
         setIsSlowAnalyzing(false);
       }

@@ -1,6 +1,7 @@
 // API配置
 // 后端服务地址 - 优先从环境变量读取，默认使用本地后端地址
-const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001').replace(/\/+$/, '');
+// 注意：开发模式下后端 run.py 默认端口为 5000
+const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 export const API_ENDPOINTS = {
   INSTANCES: `${API_BASE_URL}/api/instances`,

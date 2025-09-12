@@ -9,6 +9,21 @@ class ApiClient {
     this.defaultTimeout = 30000; // 30秒超时
   }
 
+  getUserId() {
+    try {
+      const uid = localStorage.getItem('userId');
+      return uid ? String(uid) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  appendUserId(url) {
+    const uid = this.getUserId();
+    if (!uid) return url;
+    return url.includes('?') ? `${url}&userId=${encodeURIComponent(uid)}` : `${url}?userId=${encodeURIComponent(uid)}`;
+  }
+
   /**
    * 通用请求方法
    * @param {string} url - 请求URL
@@ -65,10 +80,11 @@ class ApiClient {
   /**
    * POST请求
    */
-  async post(url, data, showError = true) {
+  async post(url, data, showError = true, options = {}) {
     return this.request(url, {
       method: 'POST',
-      body: JSON.stringify(data)
+      body: JSON.stringify(data),
+      ...options,
     }, showError);
   }
 
@@ -93,84 +109,91 @@ class ApiClient {
    * 获取实例列表
    */
   async getInstances() {
-    return this.get(API_ENDPOINTS.INSTANCES);
+    return this.get(this.appendUserId(API_ENDPOINTS.INSTANCES));
   }
 
   /**
    * 获取实例详情
    */
   async getInstance(id) {
-    return this.get(API_ENDPOINTS.INSTANCE_DETAIL(id));
+    return this.get(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)));
   }
 
   /**
    * 创建实例
    */
   async createInstance(data) {
-    return this.post(API_ENDPOINTS.INSTANCES, data);
+    return this.post(this.appendUserId(API_ENDPOINTS.INSTANCES), data);
   }
 
   /**
    * 更新实例
    */
   async updateInstance(id, data) {
-    return this.put(API_ENDPOINTS.INSTANCE_DETAIL(id), data);
+    return this.put(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)), data);
   }
 
   /**
    * 删除实例
    */
   async deleteInstance(id) {
-    return this.delete(API_ENDPOINTS.INSTANCE_DETAIL(id));
+    return this.delete(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)));
   }
 
   /**
    * 获取实例数据库列表
    */
   async getInstanceDatabases(id) {
-    return this.get(API_ENDPOINTS.INSTANCE_DATABASES(id));
+    return this.get(this.appendUserId(API_ENDPOINTS.INSTANCE_DATABASES(id)));
   }
 
   /**
    * 获取数据库表列表
    */
   async getDatabaseTables(instanceId, database) {
-    return this.get(API_ENDPOINTS.DATABASE_TABLES(instanceId, database));
+    return this.get(this.appendUserId(API_ENDPOINTS.DATABASE_TABLES(instanceId, database)));
   }
 
   /**
    * 获取表结构
    */
   async getTableSchema(instanceId, database, table) {
-    return this.get(API_ENDPOINTS.TABLE_SCHEMA(instanceId, database, table));
+    return this.get(this.appendUserId(API_ENDPOINTS.TABLE_SCHEMA(instanceId, database, table)));
   }
 
   /**
    * SQL分析
    */
   async analyzeSql(data) {
-    return this.post(API_ENDPOINTS.SQL_ANALYZE, data);
+    return this.post(this.appendUserId(API_ENDPOINTS.SQL_ANALYZE), data);
+  }
+
+  /**
+   * 执行 SQL（仅 MySQL）
+   */
+  async executeSql(data) {
+    return this.post(this.appendUserId(API_ENDPOINTS.SQL_EXECUTE), data);
   }
 
   /**
    * 配置分析
    */
   async analyzeConfig(instanceId) {
-    return this.post(API_ENDPOINTS.CONFIG_ANALYZE(instanceId));
+    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ANALYZE(instanceId)));
   }
 
   /**
    * 架构分析
    */
   async analyzeArchitecture(instanceId) {
-    return this.post(API_ENDPOINTS.ARCH_ANALYZE(instanceId));
+    return this.post(this.appendUserId(API_ENDPOINTS.ARCH_ANALYZE(instanceId)), {}, true, { timeout: 120000 });
   }
 
   /**
    * 慢日志分析
    */
   async analyzeSlowlog(instanceId) {
-    return this.post(API_ENDPOINTS.SLOWLOG_ANALYZE(instanceId));
+    return this.post(this.appendUserId(API_ENDPOINTS.SLOWLOG_ANALYZE(instanceId)), {}, true, { timeout: 120000 });
   }
 
   /**
@@ -178,14 +201,15 @@ class ApiClient {
    */
   async getSlowlogs(instanceId, params = {}) {
     const queryString = new URLSearchParams(params).toString();
-    const url = `${API_ENDPOINTS.SLOWLOG_LIST(instanceId)}${queryString ? `?${queryString}` : ''}`;
-    return this.get(url);
+    const base = `${API_ENDPOINTS.SLOWLOG_LIST(instanceId)}${queryString ? `?${queryString}` : ''}`;
+    return this.get(this.appendUserId(base));
   }
 
   /**
    * 实例状态检测
    */
   async checkInstanceStatus() {
+    // 监控接口无需 userId（全局）
     return this.post(API_ENDPOINTS.MONITOR_CHECK);
   }
 
@@ -193,6 +217,7 @@ class ApiClient {
    * 获取状态汇总
    */
   async getStatusSummary() {
+    // 监控接口无需 userId（全局）
     return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
   }
 }

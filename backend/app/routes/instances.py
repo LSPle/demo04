@@ -9,13 +9,19 @@ instances_bp = Blueprint('instances', __name__)
 
 @instances_bp.get('/instances')
 def list_instances():
-    instances = Instance.query.all()
+    # 最简方案：按 userId 过滤（query 参数）
+    user_id = request.args.get('userId')
+    q = Instance.query
+    if user_id is not None:
+        q = q.filter_by(user_id=user_id)
+    instances = q.all()
     return jsonify([i.to_dict() for i in instances]), 200
 
 @instances_bp.post('/instances')
 def create_instance():
     try:
         data = request.get_json()
+        user_id = request.args.get('userId')
         
         if not data:
             return jsonify({'error': '请求体不能为空'}), 400
@@ -47,8 +53,11 @@ def create_instance():
             
 
         
-        # 检查实例名是否已存在
-        existing = Instance.query.filter_by(instance_name=data['name']).first()
+        # 检查实例名是否已存在（对该用户范围内）
+        base_q = Instance.query
+        if user_id is not None:
+            base_q = base_q.filter_by(user_id=user_id)
+        existing = base_q.filter_by(instance_name=data['name']).first()
         if existing:
             return jsonify({'error': '实例名称已存在'}), 400
         
@@ -71,7 +80,8 @@ def create_instance():
             username=data.get('username', ''),
             password=data.get('password', ''),
             db_type=data['type'],
-            status=data.get('status', 'running')
+            status=data.get('status', 'running'),
+            user_id=user_id
         )
         
         db.session.add(instance)
@@ -91,7 +101,13 @@ def create_instance():
 @instances_bp.put('/instances/<int:instance_id>')
 def update_instance(instance_id):
     try:
-        instance = Instance.query.get_or_404(instance_id)
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        instance = q.filter_by(id=instance_id).first()
+        if not instance:
+            return jsonify({'error': '实例不存在'}), 404
         data = request.get_json()
         
         if not data:
@@ -122,9 +138,12 @@ def update_instance(instance_id):
                 
 
         
-        # 检查实例名是否与其他实例冲突
+        # 检查实例名是否与其他实例冲突（用户范围内）
         if 'name' in data and data['name'] != instance.instance_name:
-            existing = Instance.query.filter_by(instance_name=data['name']).first()
+            base_q = Instance.query
+            if user_id is not None:
+                base_q = base_q.filter_by(user_id=user_id)
+            existing = base_q.filter_by(instance_name=data['name']).first()
             if existing:
                 return jsonify({'error': '实例名称已存在'}), 400
         
@@ -174,7 +193,13 @@ def update_instance(instance_id):
 @instances_bp.delete('/instances/<int:instance_id>')
 def delete_instance(instance_id):
     try:
-        instance = Instance.query.get_or_404(instance_id)
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        instance = q.filter_by(id=instance_id).first()
+        if not instance:
+            return jsonify({'error': '实例不存在'}), 404
         instance_name = instance.instance_name
         
         db.session.delete(instance)
@@ -191,7 +216,13 @@ def delete_instance(instance_id):
 @instances_bp.get('/instances/<int:instance_id>')
 def get_instance(instance_id):
     try:
-        instance = Instance.query.get_or_404(instance_id)
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        instance = q.filter_by(id=instance_id).first()
+        if not instance:
+            return jsonify({'error': '实例不存在'}), 404
         return jsonify(instance.to_dict()), 200
     except Exception as e:
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
@@ -199,7 +230,11 @@ def get_instance(instance_id):
 @instances_bp.get('/instances/<int:instance_id>/databases')
 def list_instance_databases(instance_id):
     try:
-        inst = Instance.query.get(instance_id)
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
         
@@ -220,7 +255,11 @@ def list_instance_databases(instance_id):
 @instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables')
 def list_tables(instance_id, database):
     try:
-        inst = Instance.query.get(instance_id)
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
         if (inst.db_type or '').strip() != 'MySQL':

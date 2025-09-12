@@ -109,9 +109,16 @@ class TableAnalyzerService:
             return False, {}, "MySQL驱动不可用"
         
         try:
+            host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
+            if ':' in str(host):
+                try:
+                    h, p = str(host).rsplit(':', 1)
+                    host, port = h, int(p)
+                except Exception:
+                    pass
             conn = pymysql.connect(
-                host=instance.host,
-                port=instance.port,
+                host=host,
+                port=port,
                 user=instance.username or '',
                 password=instance.password or '',
                 database=database,
@@ -244,9 +251,16 @@ class TableAnalyzerService:
             return False, {}, "MySQL驱动不可用"
         
         try:
+            host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
+            if ':' in str(host):
+                try:
+                    h, p = str(host).rsplit(':', 1)
+                    host, port = h, int(p)
+                except Exception:
+                    pass
             conn = pymysql.connect(
-                host=instance.host,
-                port=instance.port,
+                host=host,
+                port=port,
                 user=instance.username or '',
                 password=instance.password or '',
                 database=database,

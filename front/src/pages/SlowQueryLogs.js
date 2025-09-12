@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, Select, Table, Form, Input, DatePicker, Space, Button, Tag, message, Tooltip, Modal } from 'antd';
 import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
+import apiClient from '../utils/apiClient';
 import dayjs from 'dayjs';
 import { useInstances } from '../contexts/InstanceContext';
 
@@ -40,9 +41,9 @@ const SlowQueryLogs = () => {
         params.set('start_time', f.range[0].toISOString());
         params.set('end_time', f.range[1].toISOString());
       }
-      const res = await fetch(`${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`);
-      const json = await res.json();
-      if (!res.ok) {
+      const url = `${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`;
+      const json = await apiClient.get(url);
+      if (!json || json.error) {
         // 若后端返回 overview 但报错（比如 FILE 输出），给出提示
         if (json?.overview && String(json?.error || '').includes('TABLE')) {
           message.error('仅支持 log_output=TABLE 的实例，当前实例不满足');

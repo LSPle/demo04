@@ -10,6 +10,22 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+def parse_host_port(host_value: str, fallback_port: int = 3306):
+    """从 'host' 或 'host:port' 提取主机与端口。简单按最后一个冒号切分。
+    """
+    if not host_value:
+        return '', fallback_port
+    s = str(host_value).strip()
+    if ':' in s and not s.startswith('['):
+        # 按最后一个冒号切分，兼容用户名误填多个冒号的简单场景
+        h, p = s.rsplit(':', 1)
+        try:
+            return h, int(p)
+        except Exception:
+            return h, fallback_port
+    return s, fallback_port
+
+
 class DatabaseConnectionManager:
     """数据库连接管理器：统一处理MySQL连接和错误处理"""
     
@@ -18,9 +34,10 @@ class DatabaseConnectionManager:
     
     def _create_connection_params(self, instance, database: Optional[str] = None) -> Dict[str, Any]:
         """创建连接参数字典"""
+        host, port = parse_host_port(getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
         params = {
-            'host': instance.host,
-            'port': instance.port,
+            'host': host,
+            'port': port,
             'user': instance.username or '',
             'password': instance.password or '',
             'charset': 'utf8mb4',

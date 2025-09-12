@@ -11,7 +11,7 @@ import {
   TableOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
-import { API_ENDPOINTS } from '../config/api';
+import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 const { TextArea } = Input;
 const { Option } = Select;
@@ -57,10 +57,9 @@ const SQLConsole = () => {
     try {
       setDbListError('');
       setLoadingDatabases(true);
-      const res = await fetch(API_ENDPOINTS.INSTANCE_DATABASES(instId));
-      const data = await res.json();
-      if (!res.ok) {
-        const msg = data?.error || '获取数据库列表失败';
+      const data = await apiClient.getInstanceDatabases(instId);
+      if (!data || !Array.isArray(data?.databases) && !Array.isArray(data)) {
+        const msg = '获取数据库列表失败';
         setDbListError(msg);
         throw new Error(msg);
       }
@@ -99,9 +98,8 @@ const SQLConsole = () => {
     if (type === 'db' && !children) {
       return new Promise(async (resolve) => {
         try {
-          const res = await fetch(API_ENDPOINTS.DATABASE_TABLES(selectedInstance, database));
-          const data = await res.json();
-          if (!res.ok) throw new Error(data?.error || '获取数据表失败');
+          const data = await apiClient.getDatabaseTables(selectedInstance, database);
+          if (!data) throw new Error('获取数据表失败');
           const tables = Array.isArray(data.tables) ? data.tables : [];
           const tableNodes = tables.map(t => ({
             title: renderTableTitle(database, t),
@@ -204,9 +202,8 @@ const SQLConsole = () => {
       setSchemaVisible(true);
       setSchemaLoading(true);
       setSchemaData(null);
-      const res = await fetch(API_ENDPOINTS.TABLE_SCHEMA(selectedInstance, db, table));
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || '获取表结构失败');
+      const data = await apiClient.getTableSchema(selectedInstance, db, table);
+      if (!data) throw new Error('获取表结构失败');
       const raw = data.schema || {};
       // 统一字段命名，填充必需信息
       const normalized = {
@@ -252,14 +249,8 @@ const SQLConsole = () => {
     setIsExecuting(true);
     const start = Date.now();
     try {
-      const res = await fetch(API_ENDPOINTS.SQL_EXECUTE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: Number(selectedInstance), sql: sqlQuery, database: selectedDatabase, maxRows: 1000 })
-      });
-      const data = await res.json();
+      const data = await apiClient.executeSql({ instanceId: Number(selectedInstance), sql: sqlQuery, database: selectedDatabase, maxRows: 1000 });
       const elapsed = Date.now() - start;
-      if (!res.ok) throw new Error(data?.error || '执行失败');
 
       if (data.sqlType === 'query') {
         const columns = (data.columns || []).map(col => ({ title: col, dataIndex: col, key: col }));

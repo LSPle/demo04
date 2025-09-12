@@ -8,7 +8,8 @@ import {
   ReloadOutlined,
   DatabaseOutlined
 } from '@ant-design/icons';
-import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
+import API_BASE_URL from '../config/api';
+import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 
 const { Option } = Select;
@@ -63,17 +64,7 @@ const ConfigOptimization = () => {
 
     setIsAnalyzing(true);
     try {
-      const resp = await fetch(API_ENDPOINTS.CONFIG_ANALYZE(selectedInstance), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      });
-      if (!resp.ok) {
-        let err = '分析接口返回错误';
-        try { const j = await resp.json(); err = j.error || err; } catch {}
-        throw new Error(err);
-      }
-      const data = await resp.json();
+      const data = await apiClient.analyzeConfig(selectedInstance);
       if (!data || !data.basicInfo) {
         throw new Error('接口返回数据不完整');
       }
@@ -83,18 +74,11 @@ const ConfigOptimization = () => {
       // 并行触发慢日志分析
       try {
         setIsSlowAnalyzing(true);
-        const sresp = await fetch(API_ENDPOINTS.SLOWLOG_ANALYZE(selectedInstance), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ top: 15, min_avg_ms: 10, tail_kb: 256 })
-        });
-        if (sresp.ok) {
-          const sdata = await sresp.json();
-          setSlowData(sdata);
-        } else {
-          try { const sj = await sresp.json(); message.warning(`慢日志分析失败：${sj.error || sresp.status}`); } catch { message.warning('慢日志分析失败'); }
-          setSlowData(null);
-        }
+        const sdata = await apiClient.analyzeSlowlog(selectedInstance);
+        setSlowData(sdata);
+      } catch (e) {
+        message.warning('慢日志分析失败');
+        setSlowData(null);
       } finally {
         setIsSlowAnalyzing(false);
       }

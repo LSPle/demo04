@@ -7,7 +7,12 @@ slowlog_bp = Blueprint('slowlog', __name__)
 @slowlog_bp.post('/instances/<int:instance_id>/slowlog/analyze')
 def analyze_slowlog(instance_id: int):
     try:
-        inst = Instance.query.get(instance_id)
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
         body = {}
@@ -31,7 +36,12 @@ def analyze_slowlog(instance_id: int):
 @slowlog_bp.get('/instances/<int:instance_id>/slowlog')
 def list_slowlog(instance_id: int):
     try:
-        inst = Instance.query.get(instance_id)
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
         # 解析查询参数

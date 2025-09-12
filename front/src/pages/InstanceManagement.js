@@ -9,7 +9,7 @@ import {
   DatabaseOutlined,
   WifiOutlined
 } from '@ant-design/icons';
-import { API_ENDPOINTS } from '../config/api';
+import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 import websocketService from '../services/websocketService';
 
@@ -30,9 +30,7 @@ const InstanceManagement = () => {
   const fetchInstanceData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(API_ENDPOINTS.INSTANCES);
-      if (!response.ok) throw new Error('API响应失败');
-      const data = await response.json();
+      const data = await apiClient.getInstances();
       
       // 转换后端数据格式以匹配前端展示需求
       const formattedData = data.map(instance => ({
@@ -164,18 +162,13 @@ const InstanceManagement = () => {
       cancelText: '取消',
       async onOk() {
         try {
-          const response = await fetch(API_ENDPOINTS.INSTANCE_DETAIL(record.key), {
-            method: 'DELETE'
-          });
-          
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || '删除失败');
-          }
-          
+          await apiClient.deleteInstance(record.key);
           message.success('删除成功');
-          fetchInstanceData(); // 刷新数据
-          onInstanceDeleted(); // 通知其他组件实例已删除
+          // 优先通过事件总线携带 id 做增量更新
+          websocketService.emit('instanceDeleted', { id: Number(record.key) });
+          onInstanceDeleted({ id: Number(record.key) });
+          // 回退兜底：仍保留本地表格刷新（仅本页表格，不触发全局刷新）
+          fetchInstanceData();
         } catch (error) {
           console.error('删除失败:', error);
           message.error(error.message || '删除失败，请稍后重试');
@@ -209,30 +202,13 @@ const InstanceManagement = () => {
       let response;
       if (editingInstance) {
         // 编辑模式
-        response = await fetch(API_ENDPOINTS.INSTANCE_DETAIL(editingInstance.key), {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        });
+        response = await apiClient.updateInstance(editingInstance.key, requestData);
       } else {
         // 新增模式
-        response = await fetch(API_ENDPOINTS.INSTANCES, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        });
+        response = await apiClient.createInstance(requestData);
       }
       
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || '保存失败');
-      }
-      
-      const result = await response.json();
+      const result = response;
       message.success(result.message || '保存成功');
       setIsModalVisible(false);
       form.resetFields();
@@ -242,9 +218,21 @@ const InstanceManagement = () => {
       
       // 通知其他组件实例状态已变更
       if (wasEditing) {
-        onInstanceUpdated();
+        const updatedInst = result.instance || null;
+        if (updatedInst) {
+          websocketService.emit('instanceUpdated', updatedInst);
+          onInstanceUpdated(updatedInst);
+        } else {
+          onInstanceUpdated();
+        }
       } else {
-        onInstanceAdded();
+        const newInst = result.instance || null;
+        if (newInst) {
+          websocketService.emit('instanceAdded', newInst);
+          onInstanceAdded(newInst);
+        } else {
+          onInstanceAdded();
+        }
       }
       
     } catch (error) {

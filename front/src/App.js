@@ -31,7 +31,7 @@ const AppLayout = ({ children }) => (
 const App = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthenticated = true; // 简化处理，默认已登录
+  const isAuthenticated = Boolean(localStorage.getItem('userId')); // 根据本地登录态判断
 
   // 定义顶层路由与页面组件映射（仅一级路径）
   const routeDefs = useMemo(() => ([
@@ -52,7 +52,7 @@ const App = () => {
     const match = basePaths
       .filter(p => pathname.startsWith(p))
       .sort((a, b) => b.length - a.length)[0];
-    return match || '/overview';
+    return match || '/login';
   };
 
   const activeBasePath = getBasePath(location.pathname);
@@ -68,14 +68,14 @@ const App = () => {
     });
   }, [activeBasePath]);
 
-  // 初始重定向：从根路径跳转到 /overview
+  // 初始重定向：从根路径跳转到 /login
   useEffect(() => {
     if (location.pathname === '/') {
-      navigate('/overview', { replace: true });
+      navigate('/login', { replace: true });
     }
   }, [location.pathname, navigate]);
 
-  // 简单的登录守卫（示例）：未登录时跳转到 /login
+  // 简单的登录守卫：未登录时跳转到 /login
   useEffect(() => {
     if (!isAuthenticated && activeBasePath !== '/login') {
       navigate('/login', { replace: true });

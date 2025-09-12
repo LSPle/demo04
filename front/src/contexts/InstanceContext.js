@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { message } from 'antd';
-import { API_ENDPOINTS } from '../config/api';
+import apiClient from '../utils/apiClient';
+import websocketService from '../services/websocketService';
 
 // 创建实例上下文
 const InstanceContext = createContext();
@@ -15,11 +16,7 @@ export const InstanceProvider = ({ children }) => {
   const fetchInstances = useCallback(async (showMessage = false) => {
     try {
       setLoading(true);
-      const response = await fetch(API_ENDPOINTS.INSTANCES);
-      if (!response.ok) {
-        throw new Error('获取实例列表失败');
-      }
-      const data = await response.json();
+      const data = await apiClient.getInstances();
       const instanceList = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
       setInstances(instanceList);
       setLastUpdated(new Date());
@@ -69,20 +66,53 @@ export const InstanceProvider = ({ children }) => {
     fetchInstances(false);
   }, [fetchInstances]);
 
-  // 添加实例后的回调
-  const onInstanceAdded = useCallback(() => {
-    fetchInstances(false);
-  }, [fetchInstances]);
+  // 工具函数：根据 id 合并单个实例（新增或替换）
+  const upsertInstance = useCallback((item) => {
+    if (!item || typeof item.id === 'undefined') return;
+    setInstances(prev => {
+      const exists = prev.some(i => i.id === item.id);
+      const next = exists ? prev.map(i => (i.id === item.id ? { ...i, ...item } : i)) : [...prev, item];
+      return next;
+    });
+    setLastUpdated(new Date());
+  }, []);
 
-  // 删除实例后的回调
-  const onInstanceDeleted = useCallback(() => {
-    fetchInstances(false);
-  }, [fetchInstances]);
+  // 工具函数：根据 id 删除实例
+  const removeInstanceById = useCallback((id) => {
+    if (typeof id === 'undefined' || id === null) return;
+    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
+    setInstances(prev => prev.filter(i => i.id !== numId));
+    setLastUpdated(new Date());
+  }, []);
 
-  // 更新实例后的回调
-  const onInstanceUpdated = useCallback(() => {
-    fetchInstances(false);
-  }, [fetchInstances]);
+  // 添加实例后的回调（支持增量合并）
+  const onInstanceAdded = useCallback((payload) => {
+    if (payload && payload.id !== undefined) {
+      upsertInstance(payload);
+    } else {
+      fetchInstances(false);
+    }
+  }, [fetchInstances, upsertInstance]);
+
+  // 删除实例后的回调（支持增量合并）
+  const onInstanceDeleted = useCallback((payload) => {
+    // 支持传入 id 或 { id }
+    const id = typeof payload === 'object' ? payload?.id : payload;
+    if (id !== undefined && id !== null) {
+      removeInstanceById(id);
+    } else {
+      fetchInstances(false);
+    }
+  }, [fetchInstances, removeInstanceById]);
+
+  // 更新实例后的回调（支持增量合并）
+  const onInstanceUpdated = useCallback((payload) => {
+    if (payload && payload.id !== undefined) {
+      upsertInstance(payload);
+    } else {
+      fetchInstances(false);
+    }
+  }, [fetchInstances, upsertInstance]);
 
   // 组件挂载时获取实例列表
   useEffect(() => {
@@ -97,6 +127,23 @@ export const InstanceProvider = ({ children }) => {
 
     return () => clearInterval(interval);
   }, [silentRefreshInstances]);
+
+  // 订阅 WebSocketService 的本地事件总线，进行增量更新
+  useEffect(() => {
+    const handleAdded = (data) => onInstanceAdded(data);
+    const handleDeleted = (data) => onInstanceDeleted(data);
+    const handleUpdated = (data) => onInstanceUpdated(data);
+
+    websocketService.on('instanceAdded', handleAdded);
+    websocketService.on('instanceDeleted', handleDeleted);
+    websocketService.on('instanceUpdated', handleUpdated);
+
+    return () => {
+      websocketService.off('instanceAdded', handleAdded);
+      websocketService.off('instanceDeleted', handleDeleted);
+      websocketService.off('instanceUpdated', handleUpdated);
+    };
+  }, [onInstanceAdded, onInstanceDeleted, onInstanceUpdated]);
 
   const value = {
     instances,

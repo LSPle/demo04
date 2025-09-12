@@ -10,7 +10,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
 
     def set_password(self, password: str):
         self.password_hash = generate_password_hash(password)
@@ -23,23 +23,61 @@ class User(db.Model):
             'id': self.id,
             'username': self.username,
             'email': self.email,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'created_at': None,
         }
 
+
+class UserInfo(db.Model):
+    __tablename__ = 'userinfo'
+
+    # 映射到你的 MySQL 表结构
+    user_id = db.Column('userId', db.String(255), primary_key=True)
+    password = db.Column(db.String(255), nullable=True)
+
+    def to_public(self):
+        return {
+            'id': self.user_id,
+            'username': self.user_id,
+        }
 
 class Instance(db.Model):
     __tablename__ = 'instances'
 
     id = db.Column(db.Integer, primary_key=True)
-    instance_name = db.Column(db.String(128), nullable=False)
-    host = db.Column(db.String(255), nullable=False)
-    port = db.Column(db.Integer, nullable=False, default=3306)
-    username = db.Column(db.String(128), nullable=True)
-    password = db.Column(db.String(255), nullable=True)  # 注意：仅用于演示，生产请勿明文存储
-    db_type = db.Column(db.String(64), nullable=False, default='MySQL')
-    status = db.Column(db.String(32), nullable=False, default='running')  # running|warning|error
+    # 映射到你的表字段
+    instance_name = db.Column('instanceName', db.String(128), nullable=False)
+    host = db.Column('instanceHost', db.String(255), nullable=False)
+    username = db.Column('instanceUserName', db.String(128), nullable=True)
+    password = db.Column('instanceUserPassword', db.String(255), nullable=True)
+    db_type = db.Column('instanceType', db.String(64), nullable=False, default='MySQL')
+    # 端口与状态：你的表中无对应列，这里用内存属性并提供默认值
+    # 如需持久化，请在数据库中增加相应列并改为 db.Column
+    # 归属用户
+    user_id = db.Column('userId', db.String(255), nullable=True, index=True)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # 不映射 create_time 到数据库（你的表没有该列）
+
+    @property
+    def port(self) -> int:
+        try:
+            return int(getattr(self, '_port_mem', 3306))
+        except Exception:
+            return 3306
+
+    @port.setter
+    def port(self, value):
+        try:
+            self._port_mem = int(value)
+        except Exception:
+            self._port_mem = 3306
+
+    @property
+    def status(self) -> str:
+        return getattr(self, '_status_mem', 'running') or 'running'
+
+    @status.setter
+    def status(self, value: str):
+        self._status_mem = str(value) if value else 'running'
 
     def to_dict(self):
         # 返回前端预期的驼峰命名字段
@@ -52,6 +90,7 @@ class Instance(db.Model):
             'password': self.password,
             'dbType': self.db_type,
             'status': self.status,
+            'userId': self.user_id,
 
-            'createTime': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
+            'createTime': None,
         }
