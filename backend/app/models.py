@@ -44,13 +44,17 @@ class Instance(db.Model):
     # 新增：映射数据库中的 addTime 列（你已在 MySQL 添加 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP）
     add_time = db.Column('addTime', db.DateTime, nullable=False, default=datetime.utcnow, server_default=db.func.current_timestamp())
 
+    # 新增：持久化存储实例状态（running / error / warning）
+    status_col = db.Column('instanceStatus', db.String(32), nullable=False, default='running')
+
     @property
     def status(self) -> str:
-        return getattr(self, '_status_mem', 'running') or 'running'
+        # 统一通过属性暴露，底层读写持久化列
+        return self.status_col or 'running'
 
     @status.setter
     def status(self, value: str):
-        self._status_mem = str(value) if value else 'running'
+        self.status_col = str(value) if value else 'running'
 
     def to_dict(self):
         # A 方案：仅展示层转换为北京时间，存储仍为 UTC

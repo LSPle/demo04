@@ -2,19 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Space, Tag, Input, Select, Modal, Form, message, InputNumber } from 'antd';
 import {
   PlusOutlined,
-  SearchOutlined,
-  FilterOutlined,
   EditOutlined,
   DeleteOutlined,
   DatabaseOutlined,
-  WifiOutlined
+  WifiOutlined,
+  ReloadOutlined
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 import websocketService from '../services/websocketService';
 import dayjs from 'dayjs';
 
-const { Search } = Input;
 const { Option } = Select;
 
 const InstanceManagement = () => {
@@ -62,6 +60,24 @@ const InstanceManagement = () => {
       } else {
         setInstanceData([]);
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 刷新实例状态（与概览页一致的行为）
+  const refreshInstanceStatus = async () => {
+    try {
+      setLoading(true);
+      message.loading('正在检测实例状态...', 0);
+      const result = await apiClient.checkInstanceStatus();
+      message.destroy();
+      message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
+      await fetchInstanceData();
+    } catch (error) {
+      message.destroy();
+      console.error('刷新实例状态失败:', error);
+      message.error('刷新实例状态失败，请检查后端服务');
     } finally {
       setLoading(false);
     }
@@ -145,6 +161,12 @@ const InstanceManagement = () => {
     
     // 定期检查连接状态
     const statusInterval = setInterval(handleConnectionChange, 1000);
+    
+    // 监听状态汇总更新（收到后静默刷新列表）
+    const handleStatusSummaryUpdate = () => {
+        fetchInstanceData();
+    };
+    websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
     
     // 清理函数
     return () => {
@@ -389,11 +411,15 @@ const InstanceManagement = () => {
           </Space>
           
           <Space>
-            <Search
-              placeholder="搜索实例..."
-              style={{ width: 200 }}
-            />
-            <Button icon={<FilterOutlined />}>筛选</Button>
+            <Button
+              type="primary"
+              icon={<ReloadOutlined />}
+              onClick={refreshInstanceStatus}
+              loading={loading}
+            >
+              刷新状态
+            </Button>
+            {/* 已移除搜索框与筛选按钮 */}
           </Space>
         </div>
       </Card>

@@ -66,7 +66,32 @@ def create_app():
     # Create database tables if they don't exist
     with app.app_context():
         db.create_all()
-        
+        # Ensure persistent status column exists (idempotent)
+        try:
+            from sqlalchemy import text
+            # Try MySQL 8+ syntax first
+            db.session.execute(text(
+                "ALTER TABLE instances ADD COLUMN IF NOT EXISTS instanceStatus VARCHAR(32) NOT NULL DEFAULT 'running'"
+            ))
+            db.session.commit()
+        except Exception:
+            # Rollback and fallback to checking information_schema
+            db.session.rollback()
+            try:
+                from sqlalchemy import text
+                exists = db.session.execute(text(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME='instances' AND COLUMN_NAME='instanceStatus'"
+                )).scalar()
+                if not exists:
+                    db.session.execute(text(
+                        "ALTER TABLE instances ADD COLUMN instanceStatus VARCHAR(32) NOT NULL DEFAULT 'running'"
+                    ))
+                    db.session.commit()
+            except Exception:
+                db.session.rollback()
+                # If still failing, continue without raising to avoid blocking app startup
+                pass
+    
     # Initialize WebSocket service
     from .services.websocket_service import websocket_service
     websocket_service.init_socketio(socketio, app)
