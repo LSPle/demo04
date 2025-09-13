@@ -1,5 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from . import db
+try:
+    from zoneinfo import ZoneInfo
+    TZ_BJ = ZoneInfo("Asia/Shanghai")
+except Exception:
+    TZ_BJ = None
 
 
 class UserInfo(db.Model):
@@ -48,6 +53,18 @@ class Instance(db.Model):
         self._status_mem = str(value) if value else 'running'
 
     def to_dict(self):
+        # A 方案：仅展示层转换为北京时间，存储仍为 UTC
+        if self.add_time:
+            dt = self.add_time
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if TZ_BJ:
+                add_time_str = dt.astimezone(TZ_BJ).isoformat()
+            else:
+                # 兜底：无 zoneinfo 时简单加 8 小时并附带 +08:00 标识
+                add_time_str = (dt + timedelta(hours=8)).strftime("%Y-%m-%dT%H:%M:%S+08:00")
+        else:
+            add_time_str = None
         return {
             'id': self.id,
             'instanceName': self.instance_name,
@@ -58,5 +75,5 @@ class Instance(db.Model):
             'dbType': self.db_type,
             'status': self.status,
             'userId': self.user_id,
-            'addTime': self.add_time.isoformat() if self.add_time else None,
+            'addTime': add_time_str,
         }
