@@ -18,33 +18,26 @@ class UserInfo(db.Model):
 class Instance(db.Model):
     __tablename__ = 'instances'
 
-    id = db.Column(db.Integer, primary_key=True)
+    # 将 id 与表的 BIGINT 对齐
+    id = db.Column(db.BigInteger, primary_key=True)
     # 映射到你的表字段
     instance_name = db.Column('instanceName', db.String(128), nullable=False)
     host = db.Column('instanceHost', db.String(255), nullable=False)
-    username = db.Column('instanceUserName', db.String(128), nullable=True)
-    password = db.Column('instanceUserPassword', db.String(255), nullable=True)
+
+    # 与表结构一致：非空
+    username = db.Column('instanceUserName', db.String(128), nullable=False)
+    password = db.Column('instanceUserPassword', db.String(255), nullable=False)
+
     db_type = db.Column('instanceType', db.String(64), nullable=False, default='MySQL')
-    # 端口与状态：你的表中无对应列，这里用内存属性并提供默认值
-    # 如需持久化，请在数据库中增加相应列并改为 db.Column
-    # 归属用户
-    user_id = db.Column('userId', db.String(255), nullable=True, index=True)
 
-    # 不映射 create_time 到数据库（你的表没有该列）
+    # 新增：将端口从内存属性改为持久化列
+    port = db.Column('instancePort', db.Integer, nullable=False, default=3306)
 
-    @property
-    def port(self) -> int:
-        try:
-            return int(getattr(self, '_port_mem', 3306))
-        except Exception:
-            return 3306
+    # 与表结构一致：非空并建立索引
+    user_id = db.Column('userId', db.String(255), nullable=False, index=True)
 
-    @port.setter
-    def port(self, value):
-        try:
-            self._port_mem = int(value)
-        except Exception:
-            self._port_mem = 3306
+    # 新增：映射数据库中的 addTime 列（你已在 MySQL 添加 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP）
+    add_time = db.Column('addTime', db.DateTime, nullable=False)
 
     @property
     def status(self) -> str:
@@ -55,7 +48,6 @@ class Instance(db.Model):
         self._status_mem = str(value) if value else 'running'
 
     def to_dict(self):
-        # 返回前端预期的驼峰命名字段
         return {
             'id': self.id,
             'instanceName': self.instance_name,
@@ -66,6 +58,5 @@ class Instance(db.Model):
             'dbType': self.db_type,
             'status': self.status,
             'userId': self.user_id,
-
-            'createTime': None,
+            'addTime': self.add_time.isoformat() if self.add_time else None,
         }

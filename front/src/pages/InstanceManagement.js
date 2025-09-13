@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Tag, Input, Select, Modal, Form, message } from 'antd';
+import { Card, Table, Button, Space, Tag, Input, Select, Modal, Form, message, InputNumber } from 'antd';
 import {
   PlusOutlined,
   SearchOutlined,
@@ -12,6 +12,7 @@ import {
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 import websocketService from '../services/websocketService';
+import dayjs from 'dayjs';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -36,10 +37,12 @@ const InstanceManagement = () => {
       const formattedData = data.map(instance => ({
         key: instance.id.toString(),
         name: instance.instanceName,
+        host: instance.host,
+        port: instance.port,
         ip: `${instance.host}:${instance.port}`,
         type: instance.dbType,
         status: instance.status,
-        createTime: instance.createTime,
+        addTime: instance.addTime,
         username: instance.username,
         password: instance.password
       }));
@@ -89,7 +92,13 @@ const InstanceManagement = () => {
       setInstanceData(prevData => 
         prevData.map(instance => 
           instance.key === data.id.toString() 
-            ? { ...instance, status: data.status }
+            ? { 
+                ...instance, 
+                status: data.status,
+                host: data.host ?? instance.host,
+                port: data.port ?? instance.port,
+                ip: `${data.host ?? instance.host}:${data.port ?? instance.port}`
+              }
             : instance
         )
       );
@@ -99,17 +108,34 @@ const InstanceManagement = () => {
     const handleInstancesStatusUpdate = (data) => {
       console.log('收到所有实例状态更新:', data);
       if (data.instances) {
-        const formattedData = data.instances.map(instance => ({
+        const incoming = data.instances.map(instance => ({
           key: instance.id.toString(),
           name: instance.name,
+          host: instance.host,
+          port: instance.port,
           ip: `${instance.host}:${instance.port}`,
           type: instance.dbType || 'MySQL',
           status: instance.status,
-          createTime: instance.createTime,
-          username: instance.username,
-          password: instance.password
+          // WS 一般不带 addTime；若带则覆盖
+          ...(instance.addTime !== undefined ? { addTime: instance.addTime } : {})
         }));
-        setInstanceData(formattedData);
+        setInstanceData(prev => {
+          const prevMap = new Map(prev.map(item => [item.key, item]));
+          return incoming.map(item => {
+            const old = prevMap.get(item.key);
+            return {
+              ...old,
+              ...item,
+              // WS 不包含账号口令，保留旧值
+              username: (old && old.username !== undefined) ? old.username : '',
+              password: (old && old.password !== undefined) ? old.password : '',
+              // 保留 addTime（若 WS 没有，则沿用旧值）
+              addTime: (item.addTime !== undefined)
+                ? item.addTime
+                : (old && old.addTime !== undefined ? old.addTime : undefined),
+            };
+          });
+        });
       }
     };
     
@@ -143,11 +169,11 @@ const InstanceManagement = () => {
   const handleEdit = (record) => {
     setEditingInstance(record);
     // 解析IP地址为host和port
-    const [host, port] = record.ip.split(':');
     form.setFieldsValue({
       name: record.name,
       type: record.type,
-      ip: record.ip,
+      host: record.host || '',
+      port: record.port || 3306,
       username: record.username || '',
       password: record.password || ''
     });
@@ -186,19 +212,27 @@ const InstanceManagement = () => {
   const handleModalOk = async () => {
     try {
       const values = await form.validateFields();
-      
-      // 解析连接地址
-      const [host, port] = values.ip.split(':');
-      
+
+      const host = (values.host || '').trim();
+      const portNum = Number(values.port);
+      if (!host) {
+        message.error('请输入数据库地址');
+        return;
+      }
+      if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+        message.error('请输入有效端口号（1-65535）');
+        return;
+      }
+
       const requestData = {
         name: values.name,
         host: host,
-        port: parseInt(port) || 3306,
+        port: portNum,
         type: values.type,
         username: values.username || '',
         password: values.password || ''
       };
-      
+
       let response;
       if (editingInstance) {
         // 编辑模式
@@ -207,7 +241,7 @@ const InstanceManagement = () => {
         // 新增模式
         response = await apiClient.createInstance(requestData);
       }
-      
+
       const result = response;
       message.success(result.message || '保存成功');
       setIsModalVisible(false);
@@ -215,7 +249,7 @@ const InstanceManagement = () => {
       const wasEditing = !!editingInstance;
       setEditingInstance(null);
       fetchInstanceData(); // 刷新数据
-      
+
       // 通知其他组件实例状态已变更
       if (wasEditing) {
         const updatedInst = result.instance || null;
@@ -234,7 +268,7 @@ const InstanceManagement = () => {
           onInstanceAdded();
         }
       }
-      
+
     } catch (error) {
       console.error('保存失败:', error);
       message.error(error.message || '保存失败，请检查输入数据');
@@ -256,7 +290,7 @@ const InstanceManagement = () => {
           <DatabaseOutlined style={{ color: '#1890ff' }} />
           <div>
             <div style={{ fontWeight: 500 }}>{text}</div>
-            <div style={{ fontSize: 12, color: '#8c8c8c' }}>{record.ip}</div>
+            <div style={{ fontSize: 12, color: '#8c8c8c' }}>{`${record.host}${record.port ? ':' + record.port : ''}`}</div>
           </div>
         </Space>
       )
@@ -273,9 +307,10 @@ const InstanceManagement = () => {
       render: getStatusTag
     },
     {
-      title: '创建时间',
-      dataIndex: 'createTime',
-      key: 'createTime'
+      title: '添加时间',
+      dataIndex: 'addTime',
+      key: 'addTime',
+      render: (v) => (v ? dayjs(v).format('YYYY-MM-DD HH:mm') : '-'),
     },
     {
       title: '操作',
@@ -417,27 +452,38 @@ const InstanceManagement = () => {
               <Option value="Oracle">Oracle</Option>
             </Select>
           </Form.Item>
-          
+
+          {/* 新增：拆分地址与端口 */}
           <Form.Item
-            name="ip"
-            label="连接地址"
-            rules={[{ required: true, message: '请输入连接地址' }]}
+            name="host"
+            label="数据库地址"
+            rules={[{ required: true, message: '请输入数据库地址' }]}
           >
-            <Input placeholder="例如: 192.168.1.100:3306" />
+            <Input placeholder="例如: mysql2.sqlpub.com 或 192.168.1.100" />
           </Form.Item>
-          
+
+          <Form.Item
+            name="port"
+            label="端口号"
+            rules={[{ required: true, message: '请输入端口号' }]}
+          >
+            <InputNumber placeholder="3306" min={1} max={65535} style={{ width: '100%' }} />
+          </Form.Item>
+
+          {/* 删除旧的合并输入字段 ip */}
+          {/* 之前的 ip 字段（host:port）已移除 */}
           <Form.Item
             name="username"
             label="用户名"
           >
-            <Input placeholder="请输入数据库用户名（可选）" />
+            <Input placeholder="请输入数据库用户名" />
           </Form.Item>
           
           <Form.Item
             name="password"
             label="密码"
           >
-            <Input.Password placeholder="请输入数据库密码（可选）" />
+            <Input.Password placeholder="请输入数据库密码" />
           </Form.Item>
         </Form>
       </Modal>

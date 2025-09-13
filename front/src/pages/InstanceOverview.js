@@ -45,7 +45,10 @@ const InstanceOverview = () => {
     return (instances || []).map(instance => ({
       key: instance.id,
       name: instance.instanceName,
+      // 保留 ip 以兼容，但页面展示改为基于 host/port 渲染
       ip: `${instance.host}:${instance.port}`,
+      host: instance.host,
+      port: instance.port,
       type: instance.dbType,
       status: instance.status,
       connectionInfo: {
@@ -182,10 +185,14 @@ const InstanceOverview = () => {
        ellipsis: true,
      },
      {
-       title: 'IP地址',
-       dataIndex: 'ip',
-       key: 'ip',
+       title: '连接地址',
+       key: 'address',
        width: 150,
+       render: (_, record) => {
+         const host = record.host ?? record.connectionInfo?.host ?? '-';
+         const port = record.port ?? record.connectionInfo?.port ?? '-';
+         return `${host}:${port}`;
+       },
      },
      {
        title: '数据库类型',

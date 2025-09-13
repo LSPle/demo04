@@ -110,12 +110,10 @@ class TableAnalyzerService:
         
         try:
             host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
-            if ':' in str(host):
-                try:
-                    h, p = str(host).rsplit(':', 1)
-                    host, port = h, int(p)
-                except Exception:
-                    pass
+            try:
+                port = int(port) if port is not None else 3306
+            except Exception:
+                port = 3306
             conn = pymysql.connect(
                 host=host,
                 port=port,
@@ -252,12 +250,10 @@ class TableAnalyzerService:
         
         try:
             host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
-            if ':' in str(host):
-                try:
-                    h, p = str(host).rsplit(':', 1)
-                    host, port = h, int(p)
-                except Exception:
-                    pass
+            try:
+                port = int(port) if port is not None else 3306
+            except Exception:
+                port = 3306
             conn = pymysql.connect(
                 host=host,
                 port=port,

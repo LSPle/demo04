@@ -165,7 +165,8 @@ class ApiClient {
    * SQL分析
    */
   async analyzeSql(data) {
-    return this.post(this.appendUserId(API_ENDPOINTS.SQL_ANALYZE), data);
+    // 统一 DeepSeek 相关请求超时为 120 秒
+    return this.post(this.appendUserId(API_ENDPOINTS.SQL_ANALYZE), data, true, { timeout: 120000 });
   }
 
   /**

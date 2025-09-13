@@ -1,6 +1,7 @@
+# 顶部导入与类定义片段（class WebSocketService）
 import logging
 from flask_socketio import SocketIO, emit
-from threading import Thread
+from threading import Thread, Lock
 import time
 from typing import Dict, Any
 
@@ -15,6 +16,9 @@ class WebSocketService:
         self.monitoring_thread = None
         self.monitoring_active = False
         self.last_status = {}
+        # 新增：会话计数与锁
+        self._session_lock = Lock()
+        self._active_sessions = 0
         
     def init_socketio(self, socketio: SocketIO, app=None):
         """初始化SocketIO实例"""
@@ -47,6 +51,26 @@ class WebSocketService:
             self.monitoring_thread.join(timeout=5)
         logger.info("实时监控线程已停止")
         
+    # 新增：登录后调用，首个会话触发启动
+    def increment_active_sessions(self) -> int:
+        with self._session_lock:
+            self._active_sessions += 1
+            count = self._active_sessions
+        if count == 1:
+            self.start_monitoring()
+        logger.info(f"活跃会话数增加：{count}")
+        return count
+
+    # 新增：退出登录后调用，最后一个会话触发停止
+    def decrement_active_sessions(self) -> int:
+        with self._session_lock:
+            self._active_sessions = max(0, self._active_sessions - 1)
+            count = self._active_sessions
+        if count == 0:
+            self.stop_monitoring()
+        logger.info(f"活跃会话数减少：{count}")
+        return count
+
     def _monitor_instances(self):
         """监控实例状态变化的后台线程"""
         from ..services.instance_monitor_service import instance_monitor_service

@@ -1,6 +1,5 @@
 import logging
 from typing import List, Optional, Tuple
-from ..utils.db_connection import parse_host_port
 
 try:
     import pymysql
@@ -36,7 +35,12 @@ class DatabaseService:
         conn = None
         try:
             # 建立MySQL连接
-            host, port = parse_host_port(getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
+            host = getattr(instance, 'host', '')
+            port = getattr(instance, 'port', 3306)
+            try:
+                port = int(port) if port is not None else 3306
+            except Exception:
+                port = 3306
             conn = pymysql.connect(
                 host=host,
                 port=port,
