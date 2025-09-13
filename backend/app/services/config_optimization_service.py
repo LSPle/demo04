@@ -214,7 +214,7 @@ class DeepSeekConfigAdvisor:
         self.base_url = "https://api.deepseek.com"
         self.api_key = None
         self.model = "deepseek-reasoner"
-        self.timeout = 120
+        self.timeout = 300
         self._config_loaded = False
         
     def _ensure_config(self):

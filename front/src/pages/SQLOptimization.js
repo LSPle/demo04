@@ -7,63 +7,55 @@ import {
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
+import { formatAnalysis, getHighlightKeywords } from '../utils/analysisFormatter';
 
 const { TextArea } = Input;
 const { Option } = Select;
 const { Paragraph } = Typography;
 
-// 新增：格式化分析文本的渲染函数
+// 智能渲染：将纯文本分析格式化为带小节与要点的列表，并高亮关键字
 const renderAnalysis = (text) => {
-  const lines = (text || '').split('\n');
-  const blocks = [];
-  let currentList = [];
-  let key = 0;
-
-  const flushList = () => {
-    if (currentList.length) {
-      blocks.push(
-        <ul key={`list-${key++}`} style={{ paddingLeft: 18, marginBottom: 8 }}>
-          {currentList.map((item, idx) => (
-            <li key={idx} style={{ lineHeight: 1.8 }}>{item}</li>
-          ))}
-        </ul>
-      );
-      currentList = [];
-    }
+  const { sections } = formatAnalysis(text);
+  const keywords = getHighlightKeywords();
+  const highlight = (str) => {
+    if (!str) return str;
+    let out = String(str);
+    // 简单高亮：将关键词包裹标记
+    keywords.forEach(k => {
+      const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      out = out.replace(new RegExp(esc, 'g'), (m) => `$$$HL${m}$$$`);
+    });
+    // 转成 React 片段
+    const parts = out.split(/\$\$\$HL/);
+    const nodes = [];
+    parts.forEach((p, idx) => {
+      const endIdx = p.indexOf('$$$');
+      if (endIdx >= 0) {
+        const word = p.slice(0, endIdx);
+        const rest = p.slice(endIdx + 3);
+        nodes.push(<span key={`hl-${idx}`} style={{ background: 'rgba(250, 173, 20, 0.2)', padding: '0 2px' }}>{word}</span>);
+        if (rest) nodes.push(<span key={`t-${idx}`}>{rest}</span>);
+      } else {
+        nodes.push(<span key={`p-${idx}`}>{p}</span>);
+      }
+    });
+    return <>{nodes}</>;
   };
 
-  lines.forEach((raw) => {
-    const line = raw.trim();
-    if (!line) return;
-
-    // 小标题（支持形如【标题】或 Markdown # 标题）
-    if ((line.startsWith('【') && line.endsWith('】')) || /^#{1,6}\s/.test(line)) {
-      flushList();
-      blocks.push(
-        <div key={`h-${key++}`} style={{ fontWeight: 600, marginTop: 8, marginBottom: 6 }}>
-          {line.replace(/^#{1,6}\s*/, '')}
+  return (
+    <div className="analysis-text" style={{ lineHeight: 1.7 }}>
+      {sections.map((sec, i) => (
+        <div key={i} style={{ marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, marginBottom: 6 }}>{sec.title}</div>
+          <ul style={{ paddingLeft: 20, margin: 0 }}>
+            {sec.items.map((it, j) => (
+              <li key={j} style={{ marginBottom: 4 }}>{highlight(it)}</li>
+            ))}
+          </ul>
         </div>
-      );
-      return;
-    }
-
-    // 项目符号列表
-    if (/^-\s+/.test(line) || /^[•·]\s+/.test(line)) {
-      currentList.push(line.replace(/^-\s+|^[•·]\s+/, ''));
-      return;
-    }
-
-    // 普通段落
-    flushList();
-    blocks.push(
-      <Paragraph key={`p-${key++}`} style={{ marginBottom: 8, whiteSpace: 'pre-wrap' }}>
-        {line}
-      </Paragraph>
-    );
-  });
-
-  flushList();
-  return <div>{blocks}</div>;
+      ))}
+    </div>
+  );
 };
 
 const SQLOptimization = () => {
@@ -143,13 +135,10 @@ const SQLOptimization = () => {
       };
 
       const data = await apiClient.analyzeSql(payload);
-      const rewritten = data?.rewrittenSql || null;
       const analysis = data?.analysis || null;
       
       setOptimizationResults({
         originalQuery: sqlQuery,
-        optimizedQuery: rewritten || sqlQuery,
-        hasOptimization: !!rewritten && rewritten !== sqlQuery,
         analysis
       });
     } catch (e) {
@@ -169,7 +158,7 @@ const SQLOptimization = () => {
   };
 
   return (
-    <div>
+    <div className="page-container">
       {/* 页面标题 */}
       <div className="page-header">
         <h1>SQL审核优化</h1>
@@ -258,6 +247,7 @@ const SQLOptimization = () => {
                   style={{ marginTop: 16 }}>
               {optimizationResults.analysis ? (
                 <Alert
+                  className="analysis-alert"
                   message="分析与建议"
                   description={renderAnalysis(optimizationResults.analysis)}
                   type="info"
@@ -265,15 +255,10 @@ const SQLOptimization = () => {
                   style={{ marginBottom: 16 }}
                 />
               ) : (
-                <Alert message="未获得详细分析（可能为降级输出，仅尝试了SQL重写）" type="warning" showIcon style={{ marginBottom: 16 }} />
+                <Alert message="分析服务不可用" description="DeepSeek API 未配置或服务暂时不可用，请联系管理员配置 API 密钥" type="warning" showIcon style={{ marginBottom: 16 }} />
               )}
 
-              <div style={{ marginTop: 8 }}>
-                <div style={{ marginBottom: 6, fontWeight: 500 }}>建议SQL</div>
-                <Paragraph copyable style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>
-                  {optimizationResults.optimizedQuery}
-                </Paragraph>
-              </div>
+              {/* 移除建议SQL展示 */}
             </Card>
           )}
         </div>

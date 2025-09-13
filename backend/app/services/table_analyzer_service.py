@@ -4,6 +4,7 @@ from typing import List, Dict, Optional, Tuple, Any
 import sqlparse
 from sqlparse.sql import IdentifierList, Identifier
 from sqlparse.tokens import Keyword, DML
+import json
 
 try:
     import pymysql
@@ -287,6 +288,160 @@ class TableAnalyzerService:
         except Exception as e:
             logger.error(f"获取执行计划失败: {e}")
             return False, {}, f"执行计划获取失败: {e}"
+
+    def generate_strict_context(self, sql: str, instance: Instance, database: str, enable_explain: bool = True) -> str:
+        """
+        生成严格受限的上下文，仅包含：
+        - 数据库类型与版本
+        - （可选）执行计划 EXPLAIN（JSON 与传统）
+        - 涉及表的 DDL（SHOW CREATE TABLE）
+        - 现有索引（SHOW INDEX 摘要）
+        不包含：实例主机/端口、数据采样、数据大小、行样本等。
+        """
+        parts: List[str] = []
+        db_type = (getattr(instance, 'db_type', '') or 'MySQL')
+        version_str = '未知'
+
+        if not pymysql:
+            parts.append(f"数据库: {db_type}; 版本: {version_str}")
+            return "\n".join(parts)
+
+        conn = None
+        try:
+            host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
+            try:
+                port = int(port) if port is not None else 3306
+            except Exception:
+                port = 3306
+            conn = pymysql.connect(
+                host=host,
+                port=port,
+                user=instance.username or '',
+                password=instance.password or '',
+                database=database,
+                charset='utf8mb4',
+                connect_timeout=self.timeout,
+                read_timeout=self.timeout,
+                write_timeout=self.timeout,
+                cursorclass=pymysql.cursors.DictCursor
+            )
+            with conn.cursor() as cursor:
+                try:
+                    cursor.execute("SELECT VERSION() AS ver")
+                    row = cursor.fetchone()
+                    if row and row.get('ver'):
+                        version_str = str(row['ver'])
+                except Exception:
+                    try:
+                        cursor.execute("SHOW VARIABLES LIKE 'version'")
+                        row = cursor.fetchone()
+                        if row and (row.get('Value') or row.get('value')):
+                            version_str = str(row.get('Value') or row.get('value'))
+                    except Exception:
+                        pass
+            parts.append(f"数据库: {db_type}; 版本: {version_str}")
+        except Exception as e:
+            logger.warning(f"获取数据库版本失败: {e}")
+            parts.append(f"数据库: {db_type}; 版本: 未知")
+        
+        # EXPLAIN（可选）
+        if enable_explain:
+            try:
+                ok, plan, _ = self.get_explain_plan(instance, database, sql)
+                if ok:
+                    if plan.get('json_plan'):
+                        parts.append("\n【EXPLAIN FORMAT=JSON】\n" + str(plan['json_plan']))
+                    if plan.get('traditional_plan'):
+                        try:
+                            trad_json = json.dumps(plan['traditional_plan'], ensure_ascii=False)
+                        except Exception:
+                            trad_json = str(plan['traditional_plan'])
+                        parts.append("\n【EXPLAIN】\n" + trad_json)
+            except Exception as e:
+                logger.warning(f"获取EXPLAIN失败: {e}")
+        
+        # 提取表，并收集 DDL 与索引
+        try:
+            tables = self.extract_table_names(sql) or []
+            if tables:
+                # 去重并限制数量
+                seen = []
+                for t in tables:
+                    tn = t.split('.')[-1].strip('`"')
+                    if tn and tn not in seen:
+                        seen.append(tn)
+                tables = seen[:5]
+            if conn is None:
+                # 若此前连接失败，再尝试连接一次以便抓取DDL/索引
+                host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
+                try:
+                    port = int(port) if port is not None else 3306
+                except Exception:
+                    port = 3306
+                conn = pymysql.connect(
+                    host=host,
+                    port=port,
+                    user=instance.username or '',
+                    password=instance.password or '',
+                    database=database,
+                    charset='utf8mb4',
+                    connect_timeout=self.timeout,
+                    read_timeout=self.timeout,
+                    write_timeout=self.timeout,
+                    cursorclass=pymysql.cursors.DictCursor
+                )
+            if tables and conn is not None:
+                with conn.cursor() as cursor:
+                    for table in tables:
+                        # DDL
+                        try:
+                            cursor.execute(f"SHOW CREATE TABLE `{table}`")
+                            row = cursor.fetchone() or {}
+                            ddl = row.get('Create Table') or row.get('Create View') or ''
+                            if ddl:
+                                parts.append(f"\n【DDL - {table}】\n{ddl}")
+                        except Exception as e:
+                            logger.warning(f"获取DDL失败 {table}: {e}")
+                        
+                        # INDEXES
+                        try:
+                            cursor.execute(f"SHOW INDEX FROM `{table}`")
+                            idx_rows = cursor.fetchall() or []
+                            if idx_rows:
+                                # 汇总
+                                by_name: Dict[str, Dict[str, Any]] = {}
+                                for idx in idx_rows:
+                                    name = idx.get('Key_name')
+                                    if not name:
+                                        continue
+                                    item = by_name.setdefault(name, {
+                                        'unique': not bool(idx.get('Non_unique')),
+                                        'columns': [],
+                                        'index_type': idx.get('Index_type')
+                                    })
+                                    col = idx.get('Column_name')
+                                    if col and col not in item['columns']:
+                                        item['columns'].append(col)
+                                # 格式化
+                                lines = []
+                                for name, item in by_name.items():
+                                    uniq = 'UNIQUE' if item.get('unique') else 'NON-UNIQUE'
+                                    cols = ','.join(item.get('columns') or [])
+                                    itype = item.get('index_type') or 'N/A'
+                                    lines.append(f"- {name} ({uniq}, type={itype}): [{cols}]")
+                                parts.append(f"\n【INDEXES - {table}】\n" + "\n".join(lines))
+                        except Exception as e:
+                            logger.warning(f"获取索引失败 {table}: {e}")
+        except Exception as e:
+            logger.warning(f"解析表与收集DDL/索引失败: {e}")
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
+        
+        return "\n".join(parts)
 
     def generate_context_summary(self, sql: str, instance: Instance, database: str, 
                                 sample_rows: int = None, enable_sampling: bool = True, 

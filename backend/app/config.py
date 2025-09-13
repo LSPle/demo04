@@ -52,5 +52,5 @@ class Config:
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
-    DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "120"))
+    DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
     LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"

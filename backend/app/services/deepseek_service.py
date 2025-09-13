@@ -1,9 +1,8 @@
-import os
-import json
 from typing import Optional
 import requests
 from flask import current_app
 import re
+import html
 import logging
 
 
@@ -23,77 +22,35 @@ class DeepSeekClient:
         self.base_url = cfg.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         self.api_key = cfg.get("DEEPSEEK_API_KEY")
         self.model = cfg.get("DEEPSEEK_MODEL", "deepseek-reasoner")
-        self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 120)
+        self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 300)
         self.enabled = cfg.get("LLM_ENABLED", True)
 
     def _build_prompt(self, sql: str, meta_summary: str) -> str:
-        """构造严格输出约束的系统提示。仅支持 MySQL，仅返回可优化时的重写SQL，否则返回 null。
+        """构造系统提示。仅支持 MySQL，直接返回分析内容。
         meta_summary: 后端提炼的表/索引/执行计划摘要（可为空字符串）。
         """
         return (
-            "你是资深MySQL查询优化专家。根据给定SQL与元数据/执行计划摘要，判断是否需要优化。\n"
+            "你是资深MySQL查询优化专家。根据给定SQL与元数据/执行计划摘要，提供优化分析。\n"
             "重要原则：\n"
             "1) 只有在明确存在性能问题或可显著提升效率时才建议优化\n"
             "2) 不要为了优化而优化，简单的管理查询通常不需要改动\n"
             "3) 不要改变查询的业务语义（如随意添加LIMIT、WHERE等）\n"
             "4) 优先考虑索引建议而非SQL改写\n\n"
-            "若确实需要优化且有明确更优写法，输出重写后的SQL；否则返回 null。\n"
-            "必须严格输出JSON：{\"rewritten_sql\": string|null}。\n"
-            "要求：1) 不输出解释文字；2) 仅做语义等价的改写；3) 禁止使用厂商特性以外的语法。\n"
+            "请直接输出分析内容，无需JSON格式。\n"
             f"\n【SQL】:\n{sql}\n"
             f"\n【摘要】:\n{meta_summary}\n"
         )
 
-    def _build_analyze_prompt(self, sql: str, context_summary: str) -> str:
-        """构造分析提示"""
-        return (
-            "你是资深MySQL SQL审核与性能优化专家。给定SQL及相关的表结构/数据样本/上下文摘要，\n"
-            "请完成两件事并严格以JSON返回：\n"
-            "1) analysis: 用中文给出要点化的分析，重点关注：\n"
-            "   - 查询是否存在明显的性能风险（如全表扫描大表、缺少必要索引等）\n"
-            "   - 是否有语法错误或潜在问题\n"
-            "   - 基于表结构和数据量的合理性评估\n"
-            "   - 如果是简单的管理查询且表数据量不大，说明无需优化\n"
-            "2) rewritten_sql: 只有在确实存在性能问题且有明确更优写法时才提供，否则为null\n\n"
-            "重要：不要为了优化而优化，要基于实际情况判断是否真的需要改进。\n"
-            "必须严格输出JSON：{\"analysis\": string, \"rewritten_sql\": string|null}。\n"
-            "不要输出任何额外解释文字或代码块围栏。\n"
-            f"\n【SQL】:\n{sql}\n"
-            f"\n【上下文摘要（表结构与数据样本等）】:\n{context_summary}\n"
-        )
+    def _build_analyze_prompt(self, sql: str, context_summary: str = "") -> str:
+        """
+        构建SQL分析的提示词
+        """
+        context_part = f"\n\n上下文：{context_summary}" if context_summary else ""
+        
+        return f"""SQL: {sql}{context_part}
 
-    def _extract_json_from_content(self, content):
-        """从内容中提取有效的JSON对象"""
-        if not content:
-            return None
-            
-        # 尝试直接解析
-        try:
-            return json.loads(content)
-        except json.JSONDecodeError:
-            pass
-            
-        # 查找第一个完整的JSON对象
-        json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-        matches = re.findall(json_pattern, content, re.DOTALL)
-        
-        for match in matches:
-            try:
-                return json.loads(match)
-            except json.JSONDecodeError:
-                continue
-                
-        # 尝试提取代码块中的JSON
-        code_block_pattern = r'```(?:json)?\s*([\s\S]*?)```'
-        code_matches = re.findall(code_block_pattern, content)
-        
-        for code_match in code_matches:
-            try:
-                return json.loads(code_match.strip())
-            except json.JSONDecodeError:
-                continue
-                
-        return None
+性能分析（200字内）："""
+
 
     def _make_api_call(self, messages, max_tokens=1200, max_retries=2):
         """统一的API调用方法"""
@@ -117,13 +74,9 @@ class DeepSeekClient:
                 
                 # 获取响应内容
                 message = data.get("choices", [{}])[0].get("message", {})
-                content = ""
                 
-                # 合并所有可能的内容字段
-                if message.get('reasoning_content'):
-                    content += message['reasoning_content'] + "\n"
-                if message.get('content'):
-                    content += message['content']
+                # 只返回最终内容，不包含思考过程
+                content = message.get('content', '')
                     
                 return content.strip()
                 
@@ -138,76 +91,107 @@ class DeepSeekClient:
         return None
 
     def rewrite_sql(self, sql: str, meta_summary: str = "") -> Optional[str]:
-        """返回重写后的 SQL；若不需要优化或出错，返回 None。"""
+        """返回分析内容；若出错，返回 None。"""
         if not self.enabled or not self.api_key:
             return None
 
         try:
             prompt = self._build_prompt(sql, meta_summary)
             messages = [
-                {"role": "system", "content": "你是一个只返回JSON的优化器。"},
+                {"role": "system", "content": "你是一个MySQL查询优化专家。"},
                 {"role": "user", "content": prompt},
             ]
             
             content = self._make_api_call(messages, max_tokens=800)
             if not content:
                 return None
-                
-            # 使用增强的JSON提取方法
-            obj = self._extract_json_from_content(content)
-            if not obj:
-                return None
-                
-            rewritten = obj.get("rewritten_sql")
-            if isinstance(rewritten, str) and rewritten.strip():
-                return rewritten.strip()
-            return None
+            
+            # 统一做 Markdown 符号清洗，保留文本内容
+            return strip_markdown(content).strip()
             
         except Exception as e:
             logging.error(f"DeepSeek rewrite_sql error: {str(e)}")
             return None
 
     def analyze_sql(self, sql: str, context_summary: str = "") -> Optional[dict]:
-        """要求模型输出 JSON：{"analysis": string, "rewritten_sql": string|null}
-        若未启用或出错，返回 None。"""
-        if not self.enabled or not self.api_key:
-            return None
-
+        """
+        分析SQL语句
+        """
         try:
+            if not self.enabled:
+                return None
+                
+            if not self.api_key:
+                logging.error("DeepSeek API key not configured")
+                return None
+            
+            # 构建提示和消息
             prompt = self._build_analyze_prompt(sql, context_summary)
             messages = [
-                {"role": "system", "content": "你是一个只返回JSON的审核与优化助手。"},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": prompt}
             ]
             
-            content = self._make_api_call(messages, max_tokens=1200)
-            if not content:
+            # 调用API
+            response = self._make_api_call(messages)
+            if not response:
                 return None
-                
-            # 使用增强的JSON提取方法
-            obj = self._extract_json_from_content(content)
-            if not obj:
-                logging.warning(f"Failed to extract JSON from content: {content[:200]}...")
-                return None
-                
-            analysis = obj.get("analysis")
-            rewritten = obj.get("rewritten_sql")
             
-            # 规范化
-            if not isinstance(analysis, str):
-                analysis = None
-            if not (isinstance(rewritten, str) and rewritten.strip()):
-                rewritten = None
-            else:
-                rewritten = rewritten.strip()
-                
-            return {"analysis": analysis, "rewritten_sql": rewritten}
+            # 直接处理响应内容
+            content = response.strip()
+            
+            # 统一做 Markdown 符号清洗，保留文本内容
+            analysis_text = strip_markdown(content).strip()
+            
+            return {
+                "analysis": analysis_text if analysis_text else None,
+                "rewritten_sql": None
+            }
             
         except Exception as e:
-            logging.error(f"DeepSeek analyze_sql error: {str(e)}")
+            logging.error(f"Error analyzing SQL: {str(e)}")
             return None
 
 
 # 全局工厂方法
 def get_deepseek_client() -> DeepSeekClient:
     return DeepSeekClient()
+
+
+# 统一 Markdown 清洗函数
+def strip_markdown(text: str) -> str:
+    if not text:
+        return ""
+    s = text.replace("\r\n", "\n")
+
+    # 1) 代码块（```lang\n...\n``` 或 ~~~），去围栏保留内容
+    s = re.sub(r"```[\w+-]*\n?", "", s)
+    s = s.replace("```", "")
+    s = re.sub(r"~~~[\w+-]*\n?", "", s)
+    s = s.replace("~~~", "")
+
+    # 2) 行内代码 `code`
+    s = s.replace("`", "")
+
+    # 3) 链接/图片 [text](url) / ![alt](url) -> 仅保留可读文字
+    s = re.sub(r"!\[([^\]]*)\]\([^\)]*\)", r"\1", s)
+    s = re.sub(r"\[([^\]]+)\]\([^\)]*\)", r"\1", s)
+
+    # 4) 标题/引用/列表/有序列表/分割线
+    s = re.sub(r"^\s{0,3}#{1,6}\s*", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s{0,3}>\s?", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s{0,3}(-|\*|\+)\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s{0,3}\d+[.)]\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^\s{0,3}([-*_]\s*){3,}\s*$", "", s, flags=re.MULTILINE)
+
+    # 5) 粗体/斜体（去掉标记保留正文）
+    s = s.replace("**", "").replace("__", "")
+    s = s.replace("*", "").replace("_", "")
+
+    # 6) 内联 HTML 与实体
+    s = re.sub(r"<[^>]+>", "", s)
+    s = html.unescape(s)
+
+    # 7) 多余空白
+    s = re.sub(r"[ \t]+\n", "\n", s)
+    s = re.sub(r"\n{3,}", "\n\n", s)
+    return s.strip()

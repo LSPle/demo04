@@ -271,7 +271,7 @@ def llm_advise_architecture(overview: Dict[str, Any], replication: Dict[str, Any
     api_key = cfg.get('DEEPSEEK_API_KEY')
     base_url = cfg.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
     model = cfg.get('DEEPSEEK_MODEL', 'deepseek-reasoner')
-    timeout = cfg.get('DEEPSEEK_TIMEOUT', 120)
+    timeout = cfg.get('DEEPSEEK_TIMEOUT', 300)
     if not cfg.get('LLM_ENABLED', True) or not api_key:
         return None
 

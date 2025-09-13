@@ -1279,3 +1279,69 @@ body {
   border-color: #1677ff !important;
   box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2) !important;
 }
+/* 调整基础字号与行距 */
+:root {
+  --font-sm: 13px;
+  --font-md: 15px;
+  --font-lg: 17px;
+  --font-xl: 20px;
+}
+
+body {
+  line-height: 1.75;
+}
+
+/* 内容区域留白更充足 */
+.ant-layout-content {
+  padding: 32px;
+}
+
+/* 页面整体容器，限制最大宽度，提升阅读性 */
+.page-container {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* 页面标题区：字号、行距与留白提升 */
+.page-header {
+  padding: 24px 32px;
+  margin-bottom: 32px;
+}
+
+.page-header h1 {
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+.page-header p {
+  margin: 8px 0 0 0;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+/* 内容卡片本体与内部留白 */
+.content-card {
+  border-radius: 18px;
+}
+
+.content-card .ant-card-body {
+  padding: 28px;
+}
+
+/* 内层结果卡片与标题优化 */
+.ant-card-head-title {
+  font-size: 18px;
+}
+
+/* 提升分析文本可读性 */
+.analysis-alert .ant-alert-message {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.analysis-alert .ant-alert-description,
+.analysis-text {
+  font-size: 16px;
+  line-height: 1.85;
+  letter-spacing: 0.2px;
+}

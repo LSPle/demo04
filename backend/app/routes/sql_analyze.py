@@ -31,7 +31,16 @@ def analyze_sql():
             return jsonify({"error": "SQL语句不能为空"}), 400
         if len(sql) > 10000:  # 限制SQL长度
             return jsonify({"error": "SQL语句长度不能超过10000个字符"}), 400
-            
+        # 仅支持单条语句，避免 EXPLAIN 对多语句报错（优先使用 sqlparse.split）
+        try:
+            import sqlparse as _sp
+            statements = [s.strip() for s in _sp.split(sql) if s.strip()]
+        except Exception:
+            statements = [s.strip() for s in sql.split(';') if s.strip()]
+        if len(statements) != 1:
+            return jsonify({"error": "仅支持单条 SQL 语句分析，请去除多余的分号或多语句"}), 400
+        sql = statements[0]
+        
         # 验证数据库名称
         database = (data.get('database') or '').strip()
         if not database:
@@ -43,10 +52,8 @@ def analyze_sql():
         if not re.match(r'^[a-zA-Z0-9_]+$', database):
             return jsonify({"error": "数据库名称只能包含字母、数字和下划线"}), 400
             
-        # 后端默认策略：不进行数据采样，启用执行计划分析
-        enable_sampling = False
+        # 后端默认策略：启用执行计划分析
         enable_explain = True
-        sample_rows = None
 
         # 按 userId 过滤实例归属
         user_id = request.args.get('userId')
@@ -59,28 +66,22 @@ def analyze_sql():
         if (inst.db_type or '').strip() != 'MySQL':
             return jsonify({"error": "仅支持MySQL实例"}), 400
 
-        # 构造上下文：基础元信息 + （可选）表采样 + （可选）执行计划
-        context_summary = f"instance={inst.instance_name} ({inst.host}:{inst.port}), db_type={inst.db_type}, database={database}"
+        # 构造严格上下文：仅包含 原始SQL、数据库类型与版本、EXPLAIN、表DDL、现有索引
         try:
-            extra_summary = table_analyzer_service.generate_context_summary(
+            context_summary = table_analyzer_service.generate_strict_context(
                 sql=sql,
                 instance=inst,
                 database=database,
-                sample_rows=sample_rows,
-                enable_sampling=enable_sampling,
                 enable_explain=enable_explain,
             )
-            if extra_summary:
-                context_summary = context_summary + "\n" + extra_summary
         except Exception as e:
-            # 采样或EXPLAIN失败不致命，降级为基础元信息
-            logger.warning(f"上下文生成失败 (实例ID: {instance_id}): {e}")
-            context_summary = context_summary + f"\n上下文生成失败: {str(e)}"
+            logger.warning(f"严格上下文生成失败 (实例ID: {instance_id}): {e}")
+            context_summary = ""
 
         client = get_deepseek_client()
         logger.info(f"DeepSeek客户端配置: enabled={client.enabled}, api_key_set={bool(client.api_key)}, base_url={client.base_url}")
         
-        # 使用增强的分析接口，拿到分析文本与可能的重写SQL
+        # 使用增强的分析接口，拿到分析文本
         try:
             llm_result = client.analyze_sql(sql, context_summary)
             logger.info(f"DeepSeek分析结果: {bool(llm_result)}")
@@ -89,23 +90,23 @@ def analyze_sql():
             llm_result = None
 
         if not llm_result:
-            logger.warning("DeepSeek分析失败，尝试降级到重写功能")
-            # 降级：维持与旧版兼容，仅尝试重写SQL
+            logger.warning("DeepSeek分析失败，尝试降级到基础分析功能")
+            # 降级：使用基础分析功能
             try:
-                rewritten = client.rewrite_sql(sql, context_summary)
-                logger.info(f"DeepSeek重写结果: {bool(rewritten)}")
+                analysis_result = client.rewrite_sql(sql, context_summary)
+                logger.info(f"DeepSeek基础分析结果: {bool(analysis_result)}")
             except Exception as rewrite_e:
-                logger.error(f"DeepSeek重写异常: {rewrite_e}")
-                rewritten = None
+                logger.error(f"DeepSeek基础分析异常: {rewrite_e}")
+                analysis_result = None
             
             return jsonify({
-                "analysis": None,
-                "rewrittenSql": rewritten if rewritten else None
+                "analysis": analysis_result if analysis_result else "DeepSeek分析服务暂时不可用，请稍后重试",
+                "rewrittenSql": None
             }), 200
 
         return jsonify({
             "analysis": llm_result.get("analysis"),
-            "rewrittenSql": llm_result.get("rewritten_sql")
+            "rewrittenSql": None
         }), 200
 
     except Exception as e:
@@ -128,6 +129,7 @@ def execute_sql():
             return jsonify({"error": "缺少必要参数: database"}), 400
 
         # 简单防护：仅允许单条语句执行
+        # 仅支持单条语句，避免 EXPLAIN 对多语句报错
         statements = [s.strip() for s in sql.split(';') if s.strip()]
         if len(statements) != 1:
             return jsonify({"error": "仅支持单条 SQL 语句执行，请去除多余的分号或多语句"}), 400
