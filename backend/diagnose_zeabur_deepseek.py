@@ -77,8 +77,8 @@ def test_api_call():
     
     api_key = os.getenv('DEEPSEEK_API_KEY')
     base_url = os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
-    model = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat')
-    timeout = int(os.getenv('DEEPSEEK_TIMEOUT', '30'))
+    model = os.getenv('DEEPSEEK_MODEL', 'deepseek-reasoner')
+    timeout = int(os.getenv('DEEPSEEK_TIMEOUT', '120'))
     
     if not api_key:
         print("❌ 无法测试API调用: API密钥未设置")
@@ -196,8 +196,8 @@ def generate_solution_suggestions(env_issues, network_ok, api_ok, zeabur_issues)
     print("\n📋 Zeabur环境变量配置清单:")
     print("   DEEPSEEK_API_KEY=你的API密钥")
     print("   DEEPSEEK_BASE_URL=https://api.deepseek.com")
-    print("   DEEPSEEK_MODEL=deepseek-chat")
-    print("   DEEPSEEK_TIMEOUT=30")
+    print("   DEEPSEEK_MODEL=deepseek-reasoner")
+    print("   DEEPSEEK_TIMEOUT=120")
     print("   LLM_ENABLED=true")
 
 def main():

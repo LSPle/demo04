@@ -13,30 +13,25 @@ class Config:
     PROMETHEUS_BASE_URL = os.getenv("PROMETHEUS_BASE_URL", "http://192.168.112.128:9090")
 
     # 默认 SQLite；DB_TYPE 统一小写处理
+    # 数据库类型（仍保留 DB_TYPE 切换；若你想强制 MySQL，也可把这个判断去掉）
     DB_TYPE = os.getenv("DB_TYPE", "sqlite").lower()
-    SQLITE_DB = os.getenv("SQLITE_DB", os.path.join(os.path.dirname(__file__), "..", "data", "app.db"))
 
     if DB_TYPE == "mysql":
-        # 兼容两套变量名：优先读取 DB_*，否则退回 MYSQL_*
-        def _env(*keys, default=None):
-            for k in keys:
-                v = os.getenv(k)
-                if v is not None and v != "":
-                    return v
-            return default
+        # 仅使用 MYSQL_* 环境变量，不再读取/兼容 DB_* 变量
+        MYSQL_USER = os.getenv("MYSQL_USER")
+        MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
+        MYSQL_HOST = os.getenv("MYSQL_HOST")
+        MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
+        MYSQL_NAME = os.getenv("MYSQL_NAME") or os.getenv("MYSQL_DATABASE") or os.getenv("MYSQL_DB")
 
-        MYSQL_USER = _env("DB_USER", "MYSQL_USER", default="root")
-        MYSQL_PASSWORD = _env("DB_PASSWORD", "MYSQL_PASSWORD", default="")
-        MYSQL_HOST = _env("DB_HOST", "MYSQL_HOST", default="localhost")
-        MYSQL_PORT = _env("DB_PORT", "MYSQL_PORT", default="3306")
-        MYSQL_DB = _env("DB_NAME", "MYSQL_DB", default="flask_app")
-
-        # 对用户名/密码做 URL 编码，避免特殊字符破坏连接串
-        _user_enc = quote_plus(MYSQL_USER or "")
-        _pwd_enc = quote_plus(MYSQL_PASSWORD or "")
+        if not all([MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST, MYSQL_NAME]):
+            raise RuntimeError(
+                "缺少必须的 MYSQL_* 环境变量，请设置：MYSQL_HOST、MYSQL_PORT(可选，默认3306)、MYSQL_USER、MYSQL_PASSWORD、MYSQL_NAME"
+            )
 
         SQLALCHEMY_DATABASE_URI = (
-            f"mysql+pymysql://{_user_enc}:{_pwd_enc}@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_DB}?charset=utf8mb4"
+            f"mysql+pymysql://{quote_plus(MYSQL_USER)}:{quote_plus(MYSQL_PASSWORD)}"
+            f"@{MYSQL_HOST}:{MYSQL_PORT}/{MYSQL_NAME}?charset=utf8mb4"
         )
     else:
         # SQLite URI (normalize path for Windows)
@@ -56,6 +51,6 @@ class Config:
     # DeepSeek API configuration
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-    DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-    DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "30"))
+    DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+    DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "120"))
     LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"

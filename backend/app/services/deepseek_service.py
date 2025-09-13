@@ -14,7 +14,7 @@ class DeepSeekClient:
         self.base_url = None
         self.api_key = None
         self.model = None
-        self.timeout = 30
+        self.timeout = 120
         self.enabled = True
         self._load_config()
 
@@ -22,8 +22,8 @@ class DeepSeekClient:
         cfg = current_app.config
         self.base_url = cfg.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         self.api_key = cfg.get("DEEPSEEK_API_KEY")
-        self.model = cfg.get("DEEPSEEK_MODEL", "deepseek-chat")
-        self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 30)
+        self.model = cfg.get("DEEPSEEK_MODEL", "deepseek-reasoner")
+        self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 120)
         self.enabled = cfg.get("LLM_ENABLED", True)
 
     def _build_prompt(self, sql: str, meta_summary: str) -> str:

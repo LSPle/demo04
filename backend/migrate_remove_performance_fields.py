@@ -136,7 +136,11 @@ def migrate_mysql():
     try:
         # 从配置获取连接参数
         conn = pymysql.connect(
-            host=config.MYSQL_HOST,
+            host=config.import os
+from dotenv import load_dotenv
+// ... existing code ...
+from urllib.parse import quote_plus
+// ... existing code ...,
             port=int(config.MYSQL_PORT),
             user=config.MYSQL_USER,
             password=config.MYSQL_PASSWORD,

@@ -179,7 +179,7 @@ class ApiClient {
    * 配置分析
    */
   async analyzeConfig(instanceId) {
-    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ANALYZE(instanceId)));
+    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ANALYZE(instanceId)), {}, true, { timeout: 120000 });
   }
 
   /**

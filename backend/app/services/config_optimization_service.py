@@ -213,8 +213,8 @@ class DeepSeekConfigAdvisor:
         self.enabled = True
         self.base_url = "https://api.deepseek.com"
         self.api_key = None
-        self.model = "deepseek-chat"
-        self.timeout = 30
+        self.model = "deepseek-reasoner"
+        self.timeout = 120
         self._config_loaded = False
         
     def _ensure_config(self):
