@@ -37,7 +37,7 @@ class Instance(db.Model):
     user_id = db.Column('userId', db.String(255), nullable=False, index=True)
 
     # 新增：映射数据库中的 addTime 列（你已在 MySQL 添加 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP）
-    add_time = db.Column('addTime', db.DateTime, nullable=False)
+    add_time = db.Column('addTime', db.DateTime, nullable=False, default=datetime.utcnow, server_default=db.func.current_timestamp())
 
     @property
     def status(self) -> str:

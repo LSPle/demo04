@@ -4,6 +4,7 @@ from ..services.db_validator import db_validator
 from ..services.database_service import database_service
 from ..services.table_analyzer_service import table_analyzer_service
 import pymysql
+from datetime import datetime
 
 instances_bp = Blueprint('instances', __name__)
 
@@ -81,7 +82,8 @@ def create_instance():
             password=data.get('password', ''),
             db_type=data['type'],
             status=data.get('status', 'running'),
-            user_id=user_id
+            user_id=user_id,
+            add_time=datetime.utcnow()
         )
         
         db.session.add(instance)
