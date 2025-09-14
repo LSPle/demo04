@@ -54,3 +54,5 @@ class Config:
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
     DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
     LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
+    # 调试开关：用于输出 LLM 输入/原始返回（仅本地调试时启用）
+    LLM_DEBUG = os.getenv("LLM_DEBUG", "false").lower() == "true"

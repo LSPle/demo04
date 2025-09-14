@@ -1,9 +1,10 @@
 from typing import Optional
 import requests
-from flask import current_app
+from flask import current_app, has_app_context
 import re
 import html
 import logging
+import os
 
 
 class DeepSeekClient:
@@ -18,12 +19,31 @@ class DeepSeekClient:
         self._load_config()
 
     def _load_config(self):
-        cfg = current_app.config
-        self.base_url = cfg.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        self.api_key = cfg.get("DEEPSEEK_API_KEY")
-        self.model = cfg.get("DEEPSEEK_MODEL", "deepseek-reasoner")
-        self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 300)
-        self.enabled = cfg.get("LLM_ENABLED", True)
+        try:
+            if has_app_context():
+                # 优先使用Flask配置
+                cfg = current_app.config
+                self.base_url = cfg.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+                self.api_key = cfg.get("DEEPSEEK_API_KEY")
+                self.model = cfg.get("DEEPSEEK_MODEL", "deepseek-reasoner")
+                self.timeout = cfg.get("DEEPSEEK_TIMEOUT", 300)
+                self.enabled = cfg.get("LLM_ENABLED", True)
+            else:
+                # 兜底使用环境变量
+                self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+                self.api_key = os.getenv("DEEPSEEK_API_KEY")
+                self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+                self.timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
+                self.enabled = os.getenv("LLM_ENABLED", "true").lower() != "false"
+        except Exception as e:
+            # 配置加载失败时的兜底处理
+            import logging
+            logging.warning(f"DeepSeek配置加载失败，使用默认值: {e}")
+            self.base_url = "https://api.deepseek.com"
+            self.api_key = os.getenv("DEEPSEEK_API_KEY")
+            self.model = "deepseek-reasoner"
+            self.timeout = 300
+            self.enabled = True
 
     def _build_prompt(self, sql: str, meta_summary: str) -> str:
         """构造系统提示。仅支持 MySQL，直接返回分析内容。

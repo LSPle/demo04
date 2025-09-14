@@ -1,8 +1,8 @@
 from flask import Blueprint, jsonify, request
 from ..models import Instance
 from ..services.architecture_optimization_service import arch_collector, arch_advisor, llm_advise_architecture
-# 新增：引入慢日志服务以构建简要摘要
 from ..services.slowlog_service import slowlog_service
+from ..services.metrics_summary_service import metrics_summary_service
 
 arch_opt_bp = Blueprint('arch_opt', __name__)
 
@@ -17,6 +17,7 @@ def analyze_architecture(instance_id: int):
         inst = q.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
+
         ok, data, msg = arch_collector.collect(inst)
         if not ok:
             return jsonify({'error': msg}), 400
@@ -24,7 +25,7 @@ def analyze_architecture(instance_id: int):
         replication = data.get('replication', {})
         risks = arch_advisor.advise(overview, replication)
 
-        # 新增：尝试构建慢日志摘要，优先使用 TABLE，其次降级到 ANALYZE（P_S+文件抽样）
+        # 慢日志摘要：优先使用 TABLE，其次降级到 ANALYZE（P_S+文件抽样）
         slowlog_summary = None
         try:
             ok_tbl, data_tbl, _ = slowlog_service.list_from_table(inst, page=1, page_size=5, filters={})
@@ -61,9 +62,16 @@ def analyze_architecture(instance_id: int):
         except Exception:
             slowlog_summary = None
 
-        # LLM 建议（按配置启用，失败降级为 None），携带慢日志摘要
-        llm_advice = llm_advise_architecture(overview, replication, risks, slowlog_summary)
-        # 统一响应结构（保持不变）
+        # 构建 metrics_summary（失败不阻断）
+        metrics_summary = None
+        try:
+            metrics_summary = metrics_summary_service.get_summary(inst)
+        except Exception:
+            metrics_summary = None
+
+        # LLM 建议，携带慢日志摘要与指标摘要
+        llm_advice = llm_advise_architecture(overview, replication, risks, slowlog_summary, metrics_summary)
+
         resp = {
             'overview': overview,
             'replication': replication,

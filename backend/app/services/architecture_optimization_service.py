@@ -2,12 +2,14 @@ import logging
 import json
 from typing import Any, Dict, List, Optional, Tuple
 import requests
+import re
 
 try:
     import pymysql
 except ImportError:
     pymysql = None
 
+from .deepseek_service import DeepSeekClient, strip_markdown
 from flask import current_app
 from ..models import Instance
 
@@ -265,70 +267,77 @@ class ArchAdvisor:
 
 
 # 新增：基于 DeepSeek 的架构建议
-def llm_advise_architecture(overview: Dict[str, Any], replication: Dict[str, Any], risks: List[Dict[str, Any]], slowlog_summary: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    """调用 DeepSeek 生成更智能的架构建议。返回结构化JSON，失败返回 None。"""
-    cfg = current_app.config
-    api_key = cfg.get('DEEPSEEK_API_KEY')
-    base_url = cfg.get('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')
-    model = cfg.get('DEEPSEEK_MODEL', 'deepseek-reasoner')
-    timeout = cfg.get('DEEPSEEK_TIMEOUT', 300)
-    if not cfg.get('LLM_ENABLED', True) or not api_key:
-        return None
-
-    system_prompt = "你是资深MySQL架构与高可用专家。严格按要求只返回JSON。"
-    user_prompt = (
-        "请基于给定的 MySQL 实例配置与复制状态，输出结构化治理建议。\n"
-        "必须严格输出以下JSON结构：\n"
-        "{\n"
-        "  \"summary\": string,\n"
-        "  \"issues\": [ { \"title\": string, \"severity\": \"info|warning|error\", \"evidence\": string } ],\n"
-        "  \"recommendations\": [ { \"item\": string, \"rationale\": string, \"steps\": [string], \"risks\": string, \"verification\": string, \"rollback\": string } ]\n"
-        "}\n"
-        "注意：不要输出任何多余文本或代码围栏。若信息不足，可给出通用操作与验证建议。\n"
-        f"【overview】\n{overview}\n\n"
-        f"【replication】\n{replication}\n\n"
-        f"【rule_based_risks】\n{risks}\n"
+def llm_advise_architecture(
+    overview: dict,
+    replication: dict | None,
+    rule_based_risks: list[dict] | None,
+    slowlog_summary: dict | None = None,
+    metrics_summary: dict | None = None,
+) -> dict:
+    """简化的DeepSeek架构分析服务"""
+    client = DeepSeekClient()
+    
+    # 简化提示词 - 直接要求结构化输出
+    system_prompt = (
+        "你是MySQL架构优化专家。请分析数据库架构并给出简洁的优化建议。"
+        "输出格式：\n"
+        "【健康状态】：\n"
+        "【主要问题】：\n- 问题1\n- 问题2\n"
+        "【优化建议】：\n- 建议1\n- 建议2\n"
+        "【行动计划】：\n- 步骤1\n- 步骤2"
     )
     
-    # 如果提供了慢日志摘要，将其附加到提示中，便于关联复制延迟与慢SQL热点
-    if slowlog_summary:
-        user_prompt += f"\n【slowlog_summary】\n{slowlog_summary}\n"
-
-    url = f"{base_url}/v1/chat/completions"
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.2,
-        "max_tokens": 1200,
-    }
+    # 简化数据拼接
+    data_summary = f"""
+架构概览：{overview.get('version', 'Unknown')} | 连接数：{overview.get('connections', 'N/A')}
+复制状态：{replication.get('status', 'Unknown') if replication else '未配置'}
+风险数量：{len(rule_based_risks) if rule_based_risks else 0}个
+慢查询：{slowlog_summary.get('total_count', 0) if slowlog_summary else 0}条
+"""
+    
+    user_prompt = f"请分析以下MySQL实例：\n{data_summary}"
+    
+    # DeepSeek未启用时的简单处理
+    if not getattr(client, "enabled", True) or not getattr(client, "api_key", None):
+        return {
+            "llm_advice": None,  # 明确返回None表示未启用
+            "error": "DeepSeek未配置"
+        }
+    
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=timeout)
-        resp.raise_for_status()
-        data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        # 尝试严格JSON解析
-        try:
-            obj = json.loads(content)
-        except Exception:
-            start = content.find('{'); end = content.rfind('}')
-            if start != -1 and end != -1 and end > start:
-                try:
-                    obj = json.loads(content[start:end+1])
-                except Exception:
-                    return None
-            else:
-                return None
-        # 基本校验
-        if not isinstance(obj, dict):
-            return None
-        return obj
-    except Exception:
-        return None
+        # 调用DeepSeek API
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        response = client._make_api_call(messages)
+        
+        # 简单清洗 - 只移除多余空行和特殊字符
+        cleaned_text = clean_deepseek_response(response)
+        
+        return {
+            "llm_advice": cleaned_text,
+            "error": None
+        }
+        
+    except Exception as e:
+        return {
+            "llm_advice": None,
+            "error": f"DeepSeek分析失败：{str(e)}"
+        }
 
 
+def clean_deepseek_response(text: str) -> str:
+    """简化的响应清洗函数"""
+    if not text:
+        return ""
+    
+    # 基础清洗：移除多余空行和特殊符号
+    text = text.strip()
+    text = re.sub(r'\n{3,}', '\n\n', text)  # 多个换行变成两个
+    text = re.sub(r'[*#`]+', '', text)     # 移除markdown符号
+    text = text.replace('**', '').replace('__', '')  # 移除粗体标记
+    
+    return text
 arch_collector = ArchCollector()
 arch_advisor = ArchAdvisor()

@@ -3,6 +3,8 @@ import json
 import time
 import logging
 from ..services.prometheus_service import prometheus_service
+from ..models import Instance
+from ..services.metrics_summary_service import metrics_summary_service
 
 logger = logging.getLogger(__name__)
 
@@ -79,3 +81,21 @@ def stream_metrics():
 def metrics_health():
     ok = prometheus_service.health_check()
     return jsonify({'prometheus_ok': ok}), (200 if ok else 500)
+
+
+@metrics_bp.get('/instances/<int:instance_id>/metrics/summary')
+def metrics_summary(instance_id: int):
+    try:
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
+        if not inst:
+            return jsonify({'error': '实例不存在'}), 404
+        data = metrics_summary_service.get_summary(inst)
+        return jsonify(data), 200
+    except Exception as e:
+        logger.error(f"获取指标摘要失败: {e}")
+        return jsonify({'error': f'获取指标摘要失败: {e}'}), 500
