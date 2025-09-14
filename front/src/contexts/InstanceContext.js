@@ -119,6 +119,27 @@ export const InstanceProvider = ({ children }) => {
     fetchInstances(false);
   }, [fetchInstances]);
 
+  // 新增：全局建立 WebSocket 连接，并订阅服务端推送的实例状态事件，触发静默刷新
+  useEffect(() => {
+    // 确保建立连接（幂等）
+    websocketService.connect();
+
+    const handleServerUpdate = () => {
+      // 避免频繁抖动，可按需改为去抖/节流
+      silentRefreshInstances();
+    };
+
+    websocketService.on('instancesStatusUpdate', handleServerUpdate);
+    websocketService.on('instanceStatusChange', handleServerUpdate);
+    websocketService.on('statusSummaryUpdate', handleServerUpdate);
+
+    return () => {
+      websocketService.off('instancesStatusUpdate', handleServerUpdate);
+      websocketService.off('instanceStatusChange', handleServerUpdate);
+      websocketService.off('statusSummaryUpdate', handleServerUpdate);
+    };
+  }, [silentRefreshInstances]);
+
   // 定期自动刷新实例列表（每30秒）
   useEffect(() => {
     const interval = setInterval(() => {

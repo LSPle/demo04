@@ -189,7 +189,7 @@ const ArchitectureOptimization = () => {
     { title: '类别', dataIndex: 'category', key: 'category', width: 160, render: (t) => <Tag>{t}</Tag> },
     { title: '项目', dataIndex: 'item', key: 'item', width: 200 },
     { title: '当前值', dataIndex: 'current', key: 'current', width: 240, render: (t) => (
-      <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: 4 }}>{t}</code>
+      <code style={{ backgroundColor: '#f5f5f5', padding: '2px 6px', borderRadius: 18 }}>{t}</code>
     ) },
     { title: '风险等级', dataIndex: 'level', key: 'level', width: 120, render: (l) => (
       <Tag color={statusColor(l)}>{l === 'error' ? '高' : l === 'warning' ? '中' : '低'}</Tag>
@@ -229,7 +229,7 @@ const ArchitectureOptimization = () => {
   return (
     <div style={{ padding: 24 }}>
       {/* 操作条 */}
-      <Card style={{ marginBottom: 16 }}>
+      <Card className="content-card" style={{ marginBottom: 16 }}>
         <Space size={12} wrap>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, color: '#1f1f1f', fontSize: 18, letterSpacing: 0.2 }}>
             <DatabaseOutlined style={{ color: '#722ED1', fontSize: 20 }} />
@@ -251,7 +251,7 @@ const ArchitectureOptimization = () => {
       </Card>
 
       {/* 概览 */}
-      <Card title="架构概览" style={{ marginBottom: 16 }} bordered>
+      <Card className="content-card" style={{ marginBottom: 16 }} bordered>
         {!overview ? (
           <div style={{ color: '#8c8c8c' }}>请先选择实例并点击“开始架构检查”。</div>
         ) : (
@@ -284,6 +284,7 @@ const ArchitectureOptimization = () => {
       {/* 新增：AI 架构建议（复用 SQL 审核优化的渲染） */}
       {(isAnalyzing || hasAnalyzed) && (
         <Card
+          className="content-card"
           title={<span><BulbOutlined style={{ marginRight: 8 }} />AI 架构建议</span>}
           style={{ marginBottom: 16 }}
           bordered
@@ -319,7 +320,7 @@ const ArchitectureOptimization = () => {
       )}
 
       {/* 风险与建议 */}
-      <Card title="风险与建议" bordered>
+      <Card className="content-card" title="风险与建议" bordered>
         <Table
           size="middle"
           rowKey="key"
@@ -330,7 +331,7 @@ const ArchitectureOptimization = () => {
       </Card>
 
       {/* 慢查询分析 */}
-      <Card title="慢查询分析" style={{ marginTop: 16 }} bordered extra={isSlowAnalyzing ? <Tag color="processing">分析中</Tag> : null}>
+      <Card className="content-card" title="慢查询分析" style={{ marginTop: 16 }} bordered extra={isSlowAnalyzing ? <Tag color="processing">分析中</Tag> : null}>
         {!slowData ? (
           <div style={{ color: '#8c8c8c' }}>尚无慢日志分析结果。请先点击“开始架构检查”。</div>
         ) : (

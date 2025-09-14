@@ -177,7 +177,7 @@ const SlowQueryLogs = () => {
 
   return (
     <div style={{ padding: '12px 8px' }}>
-      <Card title="慢查询日志">
+      <Card className="content-card" title="慢查询日志">
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <span>目标实例：</span>
@@ -198,7 +198,7 @@ const SlowQueryLogs = () => {
           </div>
 
           {/* 筛选 */}
-          <div style={{ background: '#fafafa', padding: 16, borderRadius: 6 }}>
+          <div style={{ background: '#fafafa', padding: 16, borderRadius: 18 }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 16, marginBottom: 16 }}>
               <div>
                 <label style={{ display: 'block', marginBottom: 4, fontWeight: 500 }}>关键字</label>

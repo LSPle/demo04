@@ -4,12 +4,15 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import 'antd/dist/reset.css';
 import './index.css';
+import { ConfigProvider } from 'antd';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <ConfigProvider theme={{ token: { borderRadius: 18, borderRadiusLG: 18, controlBorderRadius: 18 } }}>
+        <App />
+      </ConfigProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

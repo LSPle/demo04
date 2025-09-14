@@ -42,15 +42,17 @@ const Sidebar = () => {
         icon: <CodeOutlined />,
         label: 'SQL窗口'
       },
-    {
-      key: '/config-optimization',
-      icon: <ControlOutlined />,
-      label: '配置优化'
-    },
+
     {
       key: '/architecture',
       icon: <DatabaseOutlined />,
       label: '架构优化'
+    },
+    // 新增：配置优化
+    {
+      key: '/config-optimization',
+      icon: <ControlOutlined />,
+      label: '配置优化'
     },
     // 新增：慢查询日志
     {

@@ -557,7 +557,7 @@ const SQLConsole = () => {
                 resize: 'none',
                 backgroundColor: '#f4f8ff',
                 border: '1px solid #91caff',
-                borderRadius: 12,
+                borderRadius: 18,
                 padding: 16,
                 boxSizing: 'border-box'
               }}

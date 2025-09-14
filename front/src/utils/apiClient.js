@@ -176,12 +176,7 @@ class ApiClient {
     return this.post(this.appendUserId(API_ENDPOINTS.SQL_EXECUTE), data);
   }
 
-  /**
-   * 配置分析
-   */
-  async analyzeConfig(instanceId) {
-    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ANALYZE(instanceId)), {}, true, { timeout: 120000 });
-  }
+
 
   /**
    * 架构分析
@@ -221,6 +216,21 @@ class ApiClient {
     // 监控接口无需 userId（全局）
     return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
   }
+
+  /**
+   * 获取指标摘要（配置优化）
+   */
+  async getMetricsSummary(instanceId) {
+    return this.get(this.appendUserId(API_ENDPOINTS.METRICS_SUMMARY(instanceId)));
+  }
+
+  /**
+   * 获取指标建议（DeepSeek，配置优化）
+   */
+  async getMetricsAdvice(instanceId) {
+    return this.post(this.appendUserId(API_ENDPOINTS.METRICS_ADVISE(instanceId)), {}, true, { timeout: 300000 });
+  }
+
 }
 
 // 导出单例

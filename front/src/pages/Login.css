@@ -47,7 +47,7 @@
 /* 卡片样式 */
 .login-card {
   background: rgba(255, 255, 255, 0.95) !important;
-  border-radius: 16px !important;
+  border-radius: 18px !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
   backdrop-filter: blur(10px);
@@ -69,7 +69,7 @@
   width: 148px; /* 原 112px，进一步加宽 */
   height: 64px;
   padding: 0 12px; /* 略增左右留白 */
-  border-radius: 22px; /* 更圆润的胶囊形 */
+  border-radius: 18px; /* 更圆润的胶囊形 */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,7 +108,7 @@
 
 .login-input .ant-input,
 .login-input .ant-input-affix-wrapper {
-  border-radius: 12px !important;
+  border-radius: 18px !important;
   padding: 10px 12px !important;
   border: 1px solid #e6e6e6 !important;
   transition: all 0.2s ease-in-out !important;
@@ -131,7 +131,7 @@
 }
 
 .remember-checkbox .ant-checkbox-inner {
-  border-radius: 6px !important;
+  border-radius: 18px !important;
 }
 
 .forgot-password {
@@ -144,7 +144,7 @@
 
 .login-button {
   height: 44px !important;
-  border-radius: 12px !important;
+  border-radius: 18px !important;
   font-weight: 600 !important;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
   border: none !important;
@@ -162,7 +162,7 @@
 .demo-account {
   background: rgba(102, 126, 234, 0.08);
   border: 1px dashed rgba(102, 126, 234, 0.25);
-  border-radius: 12px;
+  border-radius: 18px;
   padding: 12px;
   color: #595959;
 }
@@ -176,5 +176,5 @@
 /* 响应式 */
 @media (max-width: 576px) {
   .login-content { padding: 16px; }
-  .login-card { border-radius: 12px !important; }
+  .login-card { border-radius: 18px !important; }
 }

@@ -7,10 +7,11 @@ import InstanceOverview from './pages/InstanceOverview';
 import InstanceManagement from './pages/InstanceManagement';
 import SQLOptimization from './pages/SQLOptimization';
 import SQLConsole from './pages/SQLConsole';
-import ConfigOptimization from './pages/ConfigOptimization';
+
 import Login from './pages/Login';
 import ArchitectureOptimization from './pages/ArchitectureOptimization';
 import SlowQueryLogs from './pages/SlowQueryLogs';
+import ConfigOptimization from './pages/ConfigOptimization';
 import { InstanceProvider } from './contexts/InstanceContext';
 
 const { Content } = Layout;
@@ -39,9 +40,10 @@ const App = () => {
     { path: '/management', element: <InstanceManagement /> },
     { path: '/sql-optimization', element: <SQLOptimization /> },
     { path: '/sql-console', element: <SQLConsole /> },
-    { path: '/config-optimization', element: <ConfigOptimization /> },
+    
     { path: '/architecture', element: <ArchitectureOptimization /> },
     { path: '/slowlog', element: <SlowQueryLogs /> },
+    { path: '/config-optimization', element: <ConfigOptimization /> },
     { path: '/login', element: <Login /> },
   ]), []);
 

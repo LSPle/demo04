@@ -11,8 +11,7 @@ export const API_ENDPOINTS = {
   TABLE_SCHEMA: (instanceId, database, table) => `${API_BASE_URL}/api/instances/${instanceId}/databases/${encodeURIComponent(database)}/tables/${encodeURIComponent(table)}/schema`,
   SQL_EXECUTE: `${API_BASE_URL}/api/sql/execute`,
   SQL_ANALYZE: `${API_BASE_URL}/api/sql/analyze`,
-  // 新增：配置分析接口（POST）
-  CONFIG_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/config/analyze`,
+
   // 新增：架构分析接口（POST）
   ARCH_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/arch/analyze`,
   SLOWLOG_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog/analyze`,
@@ -22,6 +21,10 @@ export const API_ENDPOINTS = {
   MONITOR_CHECK: `${API_BASE_URL}/api/monitor/instances/check`,
   MONITOR_SUMMARY: `${API_BASE_URL}/api/monitor/instances/summary`,
   METRICS: `${API_BASE_URL}/api/metrics`,
+
+  // 新增：指标摘要与建议（配置优化）
+  METRICS_SUMMARY: (id) => `${API_BASE_URL}/api/instances/${id}/metrics/summary`,
+  METRICS_ADVISE: (id) => `${API_BASE_URL}/api/instances/${id}/metrics/advise`,
 };
 
 export default API_BASE_URL;
