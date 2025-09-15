@@ -7,8 +7,10 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
-import websocketService from '../services/websocketService';
+// 移除直接使用 websocketService，统一由 InstanceContext 管理
+// import websocketService from '../services/websocketService';
 import { useInstances } from '../contexts/InstanceContext';
+import { getStatusTag } from '../utils/commonUtils';
 
 const InstanceOverview = () => {
    // 状态管理
@@ -59,35 +61,23 @@ const InstanceOverview = () => {
     }));
   }, [instances]);
  
- 
- 
-  // 静默拉取实例列表（委托给上下文）
-  const fetchInstanceData = async () => {
-    await silentRefreshInstances();
-  };
- 
-   // 刷新实例状态
-   const refreshInstanceStatus = async () => {
-     try {
+  // 刷新实例状态
+  const refreshInstanceStatus = async () => {
+    try {
       setLoading(true);
-       message.loading('正在检测实例状态...', 0);
-       
-       // 调用后端状态检测接口
-       const result = await apiClient.checkInstanceStatus();
-       
-       message.destroy();
-       message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
-       
-       // 重新获取实例数据
-      await fetchInstanceData();
-     } catch (error) {
-       message.destroy();
-       console.error('刷新实例状态失败:', error);
-       message.error('刷新实例状态失败，请检查后端服务');
-     } finally {
-       setLoading(false);
-     }
-   };
+      message.loading('正在检测实例状态...', 0);
+      const result = await apiClient.checkInstanceStatus();
+      message.destroy();
+      message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
+      await silentRefreshInstances();
+    } catch (error) {
+      message.destroy();
+      console.error('刷新实例状态失败:', error);
+      message.error('刷新实例状态失败，请检查后端服务');
+    } finally {
+      setLoading(false);
+    }
+  };
  
   // 当数据变化时更新统计
   useEffect(() => {
@@ -109,53 +99,15 @@ const InstanceOverview = () => {
      }));
    };
  
-   // WebSocket事件处理
-   useEffect(() => {
-     // 连接WebSocket
-     websocketService.connect();
-     
-     // 已移除连接状态变化监听器
-     
-      // 已删除未使用的handleInstanceStatusChange和handleStatusSummaryUpdate函数
-     
-     // 监听所有实例状态更新
-     const handleInstancesStatusUpdate = () => {
-       // 收到服务端全量更新时，重新拉取当前用户的实例列表
-      fetchInstanceData();
-     };
-     
-      // 已禁用状态变更通知监听器
-      // websocketService.on('instanceStatusChange', handleInstanceStatusChange);
-      // websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
-      websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
-     
-     // 初始获取数据
-    fetchInstanceData();
-     
-     // 已移除定期连接状态检查
-     
-     // 清理函数
-     return () => {
-       // 已移除statusInterval清理
-        // websocketService.off('instanceStatusChange', handleInstanceStatusChange);
-        // websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
-        websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
-       // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
-     };
-  }, [silentRefreshInstances]);
- 
-   
- 
-   const getStatusTag = (status) => {
-     const statusMap = {
-       running: { color: 'success', text: '运行中' },
-       warning: { color: 'warning', text: '警告' },
-       error: { color: 'error', text: '异常' },
-       closed: { color: 'default', text: '已关闭' }
-     };
-     const config = statusMap[status] || { color: 'default', text: '未知' };
-     return <Tag color={config.color}>{config.text}</Tag>;
-   };
+  // 移除页面内 WebSocket 订阅，交由 InstanceContext 统一处理
+  // useEffect(() => {
+  //   websocketService.connect();
+  //   const handleInstancesStatusUpdate = () => {
+  //     silentRefreshInstances();
+  //   };
+  //   websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
+  //   return () => websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
+  // }, [silentRefreshInstances]);
  
    const columns = [
      {
@@ -203,7 +155,7 @@ const InstanceOverview = () => {
              type="primary" 
              icon={<ReloadOutlined />} 
              onClick={refreshInstanceStatus}
-            loading={loading || instancesLoading}
+             loading={loading || instancesLoading}
            >
              刷新状态
            </Button>
@@ -214,12 +166,12 @@ const InstanceOverview = () => {
        <Card className="content-card" style={{ borderRadius: '18px' }}>
          <Table
            columns={columns}
-          dataSource={formattedData}
-          loading={loading || instancesLoading}
+           dataSource={formattedData}
+           loading={loading || instancesLoading}
            pagination={{
              current: 1,
              pageSize: 10,
-            total: formattedData.length,
+             total: formattedData.length,
              showSizeChanger: true,
              showQuickJumper: true,
              showTotal: (total, range) => `显示 ${range[0]}-${range[1]} 条，共 ${total} 条记录`

@@ -146,7 +146,6 @@ coverage.xml
 # Django stuff:
 *.log
 local_settings.py
-db.sqlite3
 
 # Flask stuff:
 instance/
@@ -196,11 +195,6 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
 
 # Project specific
 data/

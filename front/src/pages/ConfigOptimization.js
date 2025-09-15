@@ -3,6 +3,7 @@ import { Card, Select, Button, Space, message, Row, Col, Skeleton, Alert } from 
 import { DatabaseOutlined, BulbOutlined, LineChartOutlined } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
+import { useDebounceCallback } from '../hooks/useDebounce';
 
 // 轻量 Markdown 清洗（与其它页面风格一致）
 const stripMarkdownLite = (s) => {
@@ -106,18 +107,8 @@ const ConfigOptimization = () => {
   const [advice, setAdvice] = useState('');
   const [adviceStatus, setAdviceStatus] = useState('idle'); // idle|loading|success|error
 
-  // 当实例选择无效时重置
-  useEffect(() => {
-    if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
-      setSelectedInstance('');
-      setMetrics(null);
-      setAdvice('');
-      setAdviceStatus('idle');
-      message.warning('所选实例已不可用，选择已重置');
-    }
-  }, [selectedInstance, instanceOptions]);
-
-  const handleAnalyze = async () => {
+  // 防抖的分析函数，避免用户快速点击时重复请求
+  const debouncedAnalyze = useDebounceCallback(async () => {
     if (!selectedInstance) {
       message.warning('请先选择数据库实例');
       return;
@@ -143,6 +134,22 @@ const ConfigOptimization = () => {
     } finally {
       setLoading(false);
     }
+  }, 500, [selectedInstance]);
+
+  // 当实例选择无效时重置
+  useEffect(() => {
+    if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
+      setSelectedInstance('');
+      setMetrics(null);
+      setAdvice('');
+      setAdviceStatus('idle');
+      message.warning('所选实例已不可用，选择已重置');
+    }
+  }, [selectedInstance, instanceOptions]);
+
+  const handleAnalyze = () => {
+    // 调用防抖的分析函数
+    debouncedAnalyze();
   };
 
   // 将后端 summary 映射到 12 项指标

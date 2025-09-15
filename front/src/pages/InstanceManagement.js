@@ -1,68 +1,44 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Space, Tag, Input, Select, Modal, Form, message, InputNumber } from 'antd';
-import {
-  PlusOutlined,
-  EditOutlined,
-  DeleteOutlined,
-  DatabaseOutlined,
-  ReloadOutlined
-} from '@ant-design/icons';
+import React, { useState, useMemo } from 'react';
+import { Card, Table, Button, Space, Input, Select, Modal, Form, message, InputNumber } from 'antd';
+import { DatabaseOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
+import { getStatusTag } from '../utils/commonUtils';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
-import websocketService from '../services/websocketService';
-import dayjs from 'dayjs';
+// 移除未使用的 websocketService 导入
+// import websocketService from '../services/websocketService';
 
 const { Option } = Select;
 
 const InstanceManagement = () => {
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [instanceData, setInstanceData] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 删除本地副本，统一从上下文获取
+  // const [instanceData, setInstanceData] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [form] = Form.useForm();
   const [editingInstance, setEditingInstance] = useState(null);
   // 已移除wsConnected状态变量
-  const { onInstanceAdded, onInstanceDeleted, onInstanceUpdated } = useInstances();
+  const { instances, loading: instancesLoading, silentRefreshInstances, onInstanceAdded, onInstanceDeleted, onInstanceUpdated } = useInstances();
 
-  // 从后端获取实例数据
-  const fetchInstanceData = async () => {
-    try {
-      setLoading(true);
-      const data = await apiClient.getInstances();
-      
-      // 转换后端数据格式以匹配前端展示需求
-      const formattedData = data.map(instance => ({
-        key: instance.id.toString(),
-        name: instance.instanceName,
-        host: instance.host,
-        port: instance.port,
-        ip: `${instance.host}:${instance.port}`,
-        type: instance.dbType,
-        status: instance.status,
-        addTime: instance.addTime,
-        username: instance.username,
-        password: instance.password
-      }));
-      
-      setInstanceData(formattedData);
-    } catch (error) {
-      console.error('获取实例数据失败:', error);
-      message.error('获取实例数据失败，请检查后端服务');
-      
-      // 当API获取失败时，如果有现有数据则设置为已关闭状态，否则设置为空数组
-      if (instanceData.length > 0) {
-        const closedInstances = instanceData.map(instance => ({
-          ...instance,
-          status: 'closed'
-        }));
-        setInstanceData(closedInstances);
-      } else {
-        setInstanceData([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 统一使用上下文的实例数据
+  const formattedData = useMemo(() => {
+    return (instances || []).map(instance => ({
+      key: String(instance.id),
+      name: instance.instanceName,
+      host: instance.host,
+      port: instance.port,
+      ip: `${instance.host}:${instance.port}`,
+      type: instance.dbType,
+      status: instance.status,
+      addTime: instance.addTime,
+      username: instance.username,
+      password: instance.password,
+    }));
+  }, [instances]);
+
+  // 删除页面内的拉取函数，改为使用上下文的静默刷新
+  // const fetchInstanceData = async () => { ... }
 
   // 刷新实例状态（与概览页一致的行为）
   const refreshInstanceStatus = async () => {
@@ -72,7 +48,7 @@ const InstanceManagement = () => {
       const result = await apiClient.checkInstanceStatus();
       message.destroy();
       message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
-      await fetchInstanceData();
+      await silentRefreshInstances();
     } catch (error) {
       message.destroy();
       console.error('刷新实例状态失败:', error);
@@ -82,91 +58,14 @@ const InstanceManagement = () => {
     }
   };
 
-  // 组件挂载时获取数据
-  useEffect(() => {
-    fetchInstanceData();
-  }, []);
+  // 移除挂载时本地拉取，依赖全局 InstanceProvider 首次拉取
+  // useEffect(() => { fetchInstanceData(); }, []);
 
-  // WebSocket事件处理
-  useEffect(() => {
-    // 连接WebSocket
-    websocketService.connect();
-    
-    // 已移除连接状态变化监听器
-    
-    // 已删除未使用的handleInstanceStatusChange函数
-    
-    // 监听所有实例状态更新
-    const handleInstancesStatusUpdate = (data) => {
-      console.log('收到所有实例状态更新:', data);
-      if (data.instances) {
-        const incoming = data.instances.map(instance => ({
-          key: instance.id.toString(),
-          name: instance.name,
-          host: instance.host,
-          port: instance.port,
-          ip: `${instance.host}:${instance.port}`,
-          type: instance.dbType || 'MySQL',
-          status: instance.status,
-          // WS 一般不带 addTime；若带则覆盖
-          ...(instance.addTime !== undefined ? { addTime: instance.addTime } : {})
-        }));
-        setInstanceData(prev => {
-          const prevMap = new Map(prev.map(item => [item.key, item]));
-          return incoming.map(item => {
-            const old = prevMap.get(item.key);
-            return {
-              ...old,
-              ...item,
-              // WS 不包含账号口令，保留旧值
-              username: (old && old.username !== undefined) ? old.username : '',
-              password: (old && old.password !== undefined) ? old.password : '',
-              // 保留 addTime（若 WS 没有，则沿用旧值）
-              addTime: (item.addTime !== undefined)
-                ? item.addTime
-                : (old && old.addTime !== undefined ? old.addTime : undefined),
-            };
-          });
-        });
-      }
-    };
-    
-    // 已禁用状态变更通知监听器
-    // websocketService.on('instanceStatusChange', handleInstanceStatusChange);
-    websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
-    
-    // 已移除定期连接状态检查
-    
-    // 已禁用状态汇总更新监听器
-    // const handleStatusSummaryUpdate = () => {
-    //     fetchInstanceData();
-    // };
-    // websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
-    
-    // 清理函数
-    return () => {
-      // 已移除statusInterval清理
-      // websocketService.off('instanceStatusChange', handleInstanceStatusChange);
-      websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
-      // websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
-      // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
-    };
-  }, []);
-
-  const getStatusTag = (status) => {
-    const statusMap = {
-      running: { color: 'success', text: '运行中' },
-      warning: { color: 'warning', text: '警告' },
-      error: { color: 'error', text: '异常' },
-      closed: { color: 'default', text: '已关闭' }
-    };
-    const config = statusMap[status] || { color: 'default', text: '未知' };
-    return <Tag color={config.color}>{config.text}</Tag>;
-  };
+  // 移除页面内的 WebSocket 订阅，改由 InstanceContext 统一管理
+  // useEffect(() => { websocketService.connect(); ... }, []);
 
   const handleEdit = (record) => {
     setEditingInstance(record);
-    // 解析IP地址为host和port
     form.setFieldsValue({
       name: record.name,
       type: record.type,
@@ -188,11 +87,9 @@ const InstanceManagement = () => {
         try {
           await apiClient.deleteInstance(record.key);
           message.success('删除成功');
-          // 优先通过事件总线携带 id 做增量更新
-          websocketService.emit('instanceDeleted', { id: Number(record.key) });
+          // 通过事件总线与上下文增量更新
           onInstanceDeleted({ id: Number(record.key) });
-          // 回退兜底：仍保留本地表格刷新（仅本页表格，不触发全局刷新）
-          fetchInstanceData();
+          await silentRefreshInstances();
         } catch (error) {
           console.error('删除失败:', error);
           message.error(error.message || '删除失败，请稍后重试');
@@ -233,10 +130,8 @@ const InstanceManagement = () => {
 
       let response;
       if (editingInstance) {
-        // 编辑模式
         response = await apiClient.updateInstance(editingInstance.key, requestData);
       } else {
-        // 新增模式
         response = await apiClient.createInstance(requestData);
       }
 
@@ -246,13 +141,11 @@ const InstanceManagement = () => {
       form.resetFields();
       const wasEditing = !!editingInstance;
       setEditingInstance(null);
-      fetchInstanceData(); // 刷新数据
+      await silentRefreshInstances();
 
-      // 通知其他组件实例状态已变更
       if (wasEditing) {
         const updatedInst = result.instance || null;
         if (updatedInst) {
-          websocketService.emit('instanceUpdated', updatedInst);
           onInstanceUpdated(updatedInst);
         } else {
           onInstanceUpdated();
@@ -260,7 +153,6 @@ const InstanceManagement = () => {
       } else {
         const newInst = result.instance || null;
         if (newInst) {
-          websocketService.emit('instanceAdded', newInst);
           onInstanceAdded(newInst);
         } else {
           onInstanceAdded();
@@ -375,7 +267,7 @@ const InstanceManagement = () => {
               type="primary"
               icon={<ReloadOutlined />}
               onClick={refreshInstanceStatus}
-              loading={loading}
+              loading={loading || instancesLoading}
             >
               刷新状态
             </Button>
@@ -389,12 +281,12 @@ const InstanceManagement = () => {
         <Table
           rowSelection={rowSelection}
           columns={columns}
-          dataSource={instanceData}
-          loading={loading}
+          dataSource={formattedData}
+          loading={loading || instancesLoading}
           pagination={{
             current: 1,
             pageSize: 10,
-            total: instanceData.length,
+            total: formattedData.length,
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total, range) => `显示 ${range[0]}-${range[1]} 条，共 ${total} 条记录`

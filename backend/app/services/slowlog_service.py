@@ -14,6 +14,31 @@ from ..models import Instance
 logger = logging.getLogger(__name__)
 
 
+# 公共工具函数
+def _sec(val):
+    """安全转换时间为秒（兼容 datetime.timedelta/TIME 类型）"""
+    try:
+        return float(val.total_seconds()) if hasattr(val, 'total_seconds') else float(val or 0)
+    except Exception:
+        return 0.0
+
+def _s(val):
+    """统一将文本/时间字段转为可 JSON 序列化的字符串"""
+    if val is None:
+        return ''
+    try:
+        if isinstance(val, (datetime.datetime,)):
+            return val.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        pass
+    if isinstance(val, (bytes, bytearray)):
+        try:
+            return val.decode('utf-8', errors='ignore')
+        except Exception:
+            return ''
+    return str(val)
+
+
 class SlowLogService:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
@@ -98,27 +123,6 @@ class SlowLogService:
                                 (10,)  # 抽样最近 10 条
                             )
                             trows = cur.fetchall() or []
-
-                            def _sec(val):
-                                try:
-                                    return float(val.total_seconds()) if hasattr(val, 'total_seconds') else float(val or 0)
-                                except Exception:
-                                    return 0.0
-
-                            def _s(val):
-                                if val is None:
-                                    return ''
-                                try:
-                                    if isinstance(val, (datetime.datetime,)):
-                                        return val.strftime('%Y-%m-%d %H:%M:%S')
-                                except Exception:
-                                    pass
-                                if isinstance(val, (bytes, bytearray)):
-                                    try:
-                                        return val.decode('utf-8', errors='ignore')
-                                    except Exception:
-                                        return ''
-                                return str(val)
 
                             file_samples = []
                             for r in trows:
@@ -293,29 +297,6 @@ class SlowLogService:
                     )
                     cur.execute(data_sql, params + [page_size, offset])
                     rows = cur.fetchall() or []
-
-                    # 安全转换时间为秒（兼容 datetime.timedelta/TIME 类型）
-                    def _sec(val):
-                        try:
-                            return float(val.total_seconds()) if hasattr(val, 'total_seconds') else float(val or 0)
-                        except Exception:
-                            return 0.0
-
-                    # 统一将文本/时间字段转为可 JSON 序列化的字符串
-                    def _s(val):
-                        if val is None:
-                            return ''
-                        try:
-                            if isinstance(val, (datetime.datetime,)):
-                                return val.strftime('%Y-%m-%d %H:%M:%S')
-                        except Exception:
-                            pass
-                        if isinstance(val, (bytes, bytearray)):
-                            try:
-                                return val.decode('utf-8', errors='ignore')
-                            except Exception:
-                                return ''
-                        return str(val)
 
                     items: List[Dict[str, Any]] = []
                     for r in rows:

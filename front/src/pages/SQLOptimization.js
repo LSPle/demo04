@@ -7,56 +7,13 @@ import {
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
-import { formatAnalysis, getHighlightKeywords } from '../utils/analysisFormatter';
+import { formatAnalysis } from '../utils/analysisFormatter';
+import { renderAnalysis } from '../utils/commonUtils';
+import { useDebounceCallback } from '../hooks/useDebounce';
 
 const { TextArea } = Input;
 const { Option } = Select;
 const { Paragraph } = Typography;
-
-// 智能渲染：将纯文本分析格式化为带小节与要点的列表，并高亮关键字
-const renderAnalysis = (text) => {
-  const { sections } = formatAnalysis(text);
-  const keywords = getHighlightKeywords();
-  const highlight = (str) => {
-    if (!str) return str;
-    let out = String(str);
-    // 简单高亮：将关键词包裹标记
-    keywords.forEach(k => {
-      const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      out = out.replace(new RegExp(esc, 'g'), (m) => `$$$HL${m}$$$`);
-    });
-    // 转成 React 片段
-    const parts = out.split(/\$\$\$HL/);
-    const nodes = [];
-    parts.forEach((p, idx) => {
-      const endIdx = p.indexOf('$$$');
-      if (endIdx >= 0) {
-        const word = p.slice(0, endIdx);
-        const rest = p.slice(endIdx + 3);
-        nodes.push(<span key={`hl-${idx}`} style={{ background: 'rgba(250, 173, 20, 0.2)', padding: '0 2px' }}>{word}</span>);
-        if (rest) nodes.push(<span key={`t-${idx}`}>{rest}</span>);
-      } else {
-        nodes.push(<span key={`p-${idx}`}>{p}</span>);
-      }
-    });
-    return <>{nodes}</>;
-  };
-
-  return (
-    <div className="analysis-text" style={{ lineHeight: 1.7 }}>
-      {sections.map((sec, i) => (
-        <div key={i} style={{ marginBottom: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>{sec.title}</div>
-          <ul style={{ paddingLeft: 20, margin: 0 }}>
-            {sec.items.map((it, j) => (
-              <li key={j} style={{ marginBottom: 4 }}>{highlight(it)}</li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
-};
 
 const SQLOptimization = () => {
   const [selectedInstance, setSelectedInstance] = useState('');
@@ -72,6 +29,24 @@ const SQLOptimization = () => {
   const [databaseOptions, setDatabaseOptions] = useState([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
+  // 防抖的数据库获取函数，避免频繁切换实例时重复请求
+  const debouncedFetchDatabases = useDebounceCallback(async (instanceId) => {
+    setLoadingDatabases(true);
+    try {
+      const data = await apiClient.getInstanceDatabases(instanceId);
+      const options = (data?.databases || []).map(db => ({ label: db, value: db }));
+      setDatabaseOptions(options);
+      setSelectedDatabase('');
+    } catch (error) {
+      console.error('获取数据库列表失败:', error);
+      message.error('获取数据库列表失败');
+      setDatabaseOptions([]);
+      setSelectedDatabase('');
+    } finally {
+      setLoadingDatabases(false);
+    }
+  }, 300, []);
+
   // 当实例选择无效时重置
   useEffect(() => {
     if (selectedInstance && !instanceOptions.some(opt => opt.value === selectedInstance)) {
@@ -83,36 +58,15 @@ const SQLOptimization = () => {
   // 当选择实例时，获取该实例的数据库列表
   useEffect(() => {
     if (selectedInstance) {
-      fetchDatabases(selectedInstance);
+      debouncedFetchDatabases(selectedInstance);
     } else {
       setDatabaseOptions([]);
       setSelectedDatabase('');
     }
-  }, [selectedInstance]);
+  }, [selectedInstance]); // 移除debouncedFetchDatabases依赖，避免无限循环
 
-  const fetchDatabases = async (instanceId) => {
-    setLoadingDatabases(true);
-    try {
-      const data = await apiClient.getInstanceDatabases(instanceId);
-      const databases = data.databases || [];
-      setDatabaseOptions(databases.map(db => ({ value: db, label: db })));
-      
-      // 如果只有一个数据库，自动选择
-      if (databases.length === 1) {
-        setSelectedDatabase(databases[0]);
-      } else {
-        setSelectedDatabase('');
-      }
-    } catch (err) {
-      console.error('获取数据库列表失败:', err);
-      message.error('获取数据库列表失败，请检查实例连接状态');
-      setDatabaseOptions([]);
-    } finally {
-      setLoadingDatabases(false);
-    }
-  };
-
-  const handleAnalyze = async () => {
+  // 防抖的SQL分析函数，避免用户快速点击时重复请求
+  const debouncedAnalyze = useDebounceCallback(async () => {
     if (!selectedInstance) {
       message.warning('请选择实例');
       return;
@@ -147,6 +101,33 @@ const SQLOptimization = () => {
     } finally {
       setIsAnalyzing(false);
     }
+  }, 500, [selectedInstance, selectedDatabase, sqlQuery]);
+
+  const fetchDatabases = async (instanceId) => {
+    setLoadingDatabases(true);
+    try {
+      const data = await apiClient.getInstanceDatabases(instanceId);
+      const databases = data.databases || [];
+      setDatabaseOptions(databases.map(db => ({ value: db, label: db })));
+      
+      // 如果只有一个数据库，自动选择
+      if (databases.length === 1) {
+        setSelectedDatabase(databases[0]);
+      } else {
+        setSelectedDatabase('');
+      }
+    } catch (err) {
+      console.error('获取数据库列表失败:', err);
+      message.error('获取数据库列表失败，请检查实例连接状态');
+      setDatabaseOptions([]);
+    } finally {
+      setLoadingDatabases(false);
+    }
+  };
+
+  const handleAnalyze = () => {
+    // 调用防抖的分析函数
+    debouncedAnalyze();
   };
 
   const handleReset = () => {
