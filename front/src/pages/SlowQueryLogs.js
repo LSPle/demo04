@@ -177,7 +177,7 @@ const SlowQueryLogs = () => {
 
   return (
     <div style={{ padding: '12px 8px' }}>
-      <Card className="content-card" title="慢查询日志">
+      <Card className="content-card" title="慢查询日志" style={{ borderRadius: '18px' }}>
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <span>目标实例：</span>
@@ -272,7 +272,7 @@ const SlowQueryLogs = () => {
         </Space>
       </Card>
 
-      <Modal open={sqlPreview.open} title="完整SQL" footer={null} onCancel={() => setSqlPreview({ open: false, sql: '' })} width={800}>
+      <Modal open={sqlPreview.open} title="完整SQL" footer={null} onCancel={() => setSqlPreview({ open: false, sql: '' })} width={800} style={{ borderRadius: '18px' }}>
         <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{sqlPreview.sql}</pre>
       </Modal>
     </div>

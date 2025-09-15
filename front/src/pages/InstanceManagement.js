@@ -5,7 +5,6 @@ import {
   EditOutlined,
   DeleteOutlined,
   DatabaseOutlined,
-  WifiOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
@@ -22,7 +21,7 @@ const InstanceManagement = () => {
   const [loading, setLoading] = useState(true);
   const [form] = Form.useForm();
   const [editingInstance, setEditingInstance] = useState(null);
-  const [wsConnected, setWsConnected] = useState(false);
+  // 已移除wsConnected状态变量
   const { onInstanceAdded, onInstanceDeleted, onInstanceUpdated } = useInstances();
 
   // 从后端获取实例数据
@@ -93,32 +92,9 @@ const InstanceManagement = () => {
     // 连接WebSocket
     websocketService.connect();
     
-    // 监听连接状态变化
-    const handleConnectionChange = () => {
-      const status = websocketService.getConnectionStatus();
-      setWsConnected(status.isConnected);
-    };
+    // 已移除连接状态变化监听器
     
-    // 监听实例状态变化
-    const handleInstanceStatusChange = (data) => {
-      console.log('收到实例状态变化:', data);
-      message.info(`实例 ${data.name} 状态变更为: ${data.status === 'running' ? '运行中' : '异常'}`);
-      
-      // 更新单个实例状态
-      setInstanceData(prevData => 
-        prevData.map(instance => 
-          instance.key === data.id.toString() 
-            ? { 
-                ...instance, 
-                status: data.status,
-                host: data.host ?? instance.host,
-                port: data.port ?? instance.port,
-                ip: `${data.host ?? instance.host}:${data.port ?? instance.port}`
-              }
-            : instance
-        )
-      );
-    };
+    // 已删除未使用的handleInstanceStatusChange函数
     
     // 监听所有实例状态更新
     const handleInstancesStatusUpdate = (data) => {
@@ -155,24 +131,24 @@ const InstanceManagement = () => {
       }
     };
     
-    // 注册事件监听器
-    websocketService.on('instanceStatusChange', handleInstanceStatusChange);
+    // 已禁用状态变更通知监听器
+    // websocketService.on('instanceStatusChange', handleInstanceStatusChange);
     websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
     
-    // 定期检查连接状态
-    const statusInterval = setInterval(handleConnectionChange, 1000);
+    // 已移除定期连接状态检查
     
-    // 监听状态汇总更新（收到后静默刷新列表）
-    const handleStatusSummaryUpdate = () => {
-        fetchInstanceData();
-    };
-    websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
+    // 已禁用状态汇总更新监听器
+    // const handleStatusSummaryUpdate = () => {
+    //     fetchInstanceData();
+    // };
+    // websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
     
     // 清理函数
     return () => {
-      clearInterval(statusInterval);
-      websocketService.off('instanceStatusChange', handleInstanceStatusChange);
+      // 已移除statusInterval清理
+      // websocketService.off('instanceStatusChange', handleInstanceStatusChange);
       websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
+      // websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
       // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
     };
   }, []);
@@ -370,30 +346,14 @@ const InstanceManagement = () => {
     <div>
       {/* 页面标题 */}
       <div className="page-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>实例管理</h1>
-            <p>添加、删除和配置数据库实例</p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <WifiOutlined 
-              style={{ 
-                color: wsConnected ? '#52c41a' : '#ff4d4f',
-                fontSize: '16px'
-              }} 
-            />
-            <span style={{ 
-              color: wsConnected ? '#52c41a' : '#ff4d4f',
-              fontSize: '14px'
-            }}>
-              {wsConnected ? '实时连接' : '连接断开'}
-            </span>
-          </div>
+        <div>
+          <h1>实例管理</h1>
+          <p>添加、删除和配置数据库实例</p>
         </div>
       </div>
 
       {/* 操作栏 */}
-      <Card className="content-card" style={{ marginBottom: 24 }}>
+      <Card className="content-card" style={{ marginBottom: 24, borderRadius: '18px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Space>
             <Button
@@ -425,7 +385,7 @@ const InstanceManagement = () => {
       </Card>
 
       {/* 实例列表 */}
-      <Card className="content-card">
+      <Card className="content-card" style={{ borderRadius: '18px' }}>
         <Table
           rowSelection={rowSelection}
           columns={columns}

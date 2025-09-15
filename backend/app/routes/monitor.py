@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 from ..services.instance_monitor_service import instance_monitor_service
 import logging
 
@@ -10,10 +10,15 @@ monitor_bp = Blueprint('monitor', __name__)
 @monitor_bp.post('/monitor/instances/check')
 def check_instances_status():
     """
-    手动触发所有实例状态检测
+    手动触发实例状态检测
+    支持按用户ID过滤：POST请求体中包含userId参数则只检测该用户的实例
     """
     try:
-        total, normal, error = instance_monitor_service.check_all_instances()
+        # 从请求体中获取userId参数
+        data = request.get_json() or {}
+        user_id = data.get('userId')
+        
+        total, normal, error = instance_monitor_service.check_all_instances(user_id)
         
         return jsonify({
             'message': '实例状态检测完成',

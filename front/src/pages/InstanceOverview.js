@@ -4,8 +4,7 @@ import {
   DatabaseOutlined,
   PlayCircleOutlined,
   ExclamationCircleOutlined,
-  ReloadOutlined,
-  WifiOutlined
+  ReloadOutlined
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import websocketService from '../services/websocketService';
@@ -35,7 +34,7 @@ const InstanceOverview = () => {
      }
    ]);
    
-   const [wsConnected, setWsConnected] = useState(false);
+   // 已移除wsConnected状态变量
 
   // 订阅全局实例上下文
   const { instances, loading: instancesLoading, silentRefreshInstances } = useInstances();
@@ -115,26 +114,9 @@ const InstanceOverview = () => {
      // 连接WebSocket
      websocketService.connect();
      
-     // 监听连接状态变化
-     const handleConnectionChange = () => {
-       const status = websocketService.getConnectionStatus();
-       setWsConnected(status.isConnected);
-     };
+     // 已移除连接状态变化监听器
      
-     // 监听实例状态变化
-     const handleInstanceStatusChange = (data) => {
-       console.log('收到实例状态变化:', data);
-       message.info(`实例 ${data.name} 状态变更为: ${data.status === 'running' ? '运行中' : '异常'}`);
-       
-      // 收到单个实例状态变化后，静默刷新全量实例列表
-      silentRefreshInstances();
-     };
-     
-     // 监听状态汇总更新
-     const handleStatusSummaryUpdate = () => {
-       // 收到状态汇总后，静默刷新实例列表，统计将由 formattedData 变化时自动更新
-       silentRefreshInstances();
-     };
+      // 已删除未使用的handleInstanceStatusChange和handleStatusSummaryUpdate函数
      
      // 监听所有实例状态更新
      const handleInstancesStatusUpdate = () => {
@@ -142,23 +124,22 @@ const InstanceOverview = () => {
       fetchInstanceData();
      };
      
-     // 注册事件监听器
-     websocketService.on('instanceStatusChange', handleInstanceStatusChange);
-     websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
-     websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
+      // 已禁用状态变更通知监听器
+      // websocketService.on('instanceStatusChange', handleInstanceStatusChange);
+      // websocketService.on('statusSummaryUpdate', handleStatusSummaryUpdate);
+      websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
      
      // 初始获取数据
     fetchInstanceData();
      
-     // 定期检查连接状态
-     const statusInterval = setInterval(handleConnectionChange, 1000);
+     // 已移除定期连接状态检查
      
      // 清理函数
      return () => {
-       clearInterval(statusInterval);
-       websocketService.off('instanceStatusChange', handleInstanceStatusChange);
-       websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
-       websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
+       // 已移除statusInterval清理
+        // websocketService.off('instanceStatusChange', handleInstanceStatusChange);
+        // websocketService.off('statusSummaryUpdate', handleStatusSummaryUpdate);
+        websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
        // 注意：不在这里断开WebSocket连接，因为其他组件可能也在使用
      };
   }, [silentRefreshInstances]);
@@ -218,29 +199,19 @@ const InstanceOverview = () => {
              <h1>实例概览</h1>
              <p>数据库实例运行状态总览</p>
            </div>
-           <Space>
-             {/* WebSocket连接状态指示器 */}
-             <Tag 
-               color={wsConnected ? 'success' : 'error'} 
-               icon={<WifiOutlined />}
-               style={{ marginRight: 8 }}
-             >
-               {wsConnected ? '实时连接' : '连接断开'}
-             </Tag>
-             <Button 
-               type="primary" 
-               icon={<ReloadOutlined />} 
-               onClick={refreshInstanceStatus}
-              loading={loading || instancesLoading}
-             >
-               刷新状态
-             </Button>
-           </Space>
+           <Button 
+             type="primary" 
+             icon={<ReloadOutlined />} 
+             onClick={refreshInstanceStatus}
+            loading={loading || instancesLoading}
+           >
+             刷新状态
+           </Button>
          </div>
        </div>
  
        {/* 数据库实例列表 */}
-       <Card className="content-card">
+       <Card className="content-card" style={{ borderRadius: '18px' }}>
          <Table
            columns={columns}
           dataSource={formattedData}

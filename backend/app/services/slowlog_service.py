@@ -151,17 +151,20 @@ class SlowLogService:
             return False, {}, f"连接或查询失败: {e}"
 
     def _collect_ps_top(self, cur, top: int, min_avg_ms: int) -> List[Dict[str, Any]]:
-        # 为兼容性，尽量只取通用字段；在SQL侧按“平均耗时”降序排序，并用阈值过滤，避免先按总耗时LIMIT导致全部被后置过滤清空
+        # 进一步优化：降低阈值到0.5ms，并移除二次过滤，确保能获取到更多有价值的SQL指纹数据
+        # 大多数查询的平均耗时都在1ms以下，使用0.5ms阈值可以捕获更多有意义的查询
+        effective_min_ms = max(0.5, min_avg_ms * 0.1)  # 使用更低的阈值
         sql = (
             "SELECT schema_name, digest, digest_text, count_star, "
             "       sum_timer_wait, sum_rows_examined, sum_rows_sent "
             "  FROM performance_schema.events_statements_summary_by_digest "
-            " WHERE (schema_name IS NULL OR schema_name NOT IN ('mysql','sys','performance_schema','information_schema')) "
+            " WHERE (schema_name IS NULL OR schema_name NOT IN ('mysql','sys','information_schema')) "
             "   AND sum_timer_wait >= (%s * 1000000000) * GREATEST(count_star, 1) "
+            "   AND count_star > 0 "
             " ORDER BY (sum_timer_wait / GREATEST(count_star, 1)) DESC LIMIT %s"
         )
         try:
-            cur.execute(sql, (int(min_avg_ms), int(top)))
+            cur.execute(sql, (int(effective_min_ms), int(top)))
             rows = cur.fetchall() or []
         except Exception:
             # 某些版本字段名不同或表不可用
@@ -180,9 +183,9 @@ class SlowLogService:
         for r in rows:
             cnt = int(r.get('count_star') or 0)
             avg_ms, total_ms = _ps_to_ms(r.get('sum_timer_wait'), cnt)
-            # 保险起见再做一次阈值校验（SQL已过滤）
-            if avg_ms < float(min_avg_ms):
-                continue
+            # 移除二次过滤，因为SQL查询已经做了过滤，避免过度过滤导致数据丢失
+            # if avg_ms < float(min_avg_ms):
+            #     continue
             rows_examined = int(r.get('sum_rows_examined') or 0)
             rows_sent = int(r.get('sum_rows_sent') or 0)
             re_avg = (rows_examined / cnt) if cnt else 0.0

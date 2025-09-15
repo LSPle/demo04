@@ -1,6 +1,8 @@
 import logging
 from typing import List, Tuple
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 try:
     import pymysql
@@ -17,7 +19,8 @@ class InstanceMonitorService:
     """实例监控服务：定期检测实例连接状态并更新数据库"""
 
     def __init__(self):
-        self.timeout = 5  # 连接超时时间（秒）
+        self.timeout = 3  # 连接超时时间（秒）- 从5秒优化到3秒
+        self.max_workers = 10  # 并发检测线程数
 
     def check_instance_connection(self, instance: Instance) -> Tuple[bool, str]:
         """
@@ -36,7 +39,7 @@ class InstanceMonitorService:
         
         conn = None
         try:
-            # 尝试建立MySQL连接
+            # 尝试建立MySQL连接 - 优化连接参数
             conn = pymysql.connect(
                 host=instance.host,
                 port=instance.port,
@@ -45,7 +48,9 @@ class InstanceMonitorService:
                 charset='utf8mb4',
                 connect_timeout=self.timeout,
                 read_timeout=self.timeout,
-                write_timeout=self.timeout
+                write_timeout=self.timeout,
+                autocommit=True,  # 自动提交，减少事务开销
+                cursorclass=pymysql.cursors.Cursor  # 使用默认游标类型
             )
             
             # 执行简单查询验证连接
@@ -94,29 +99,54 @@ class InstanceMonitorService:
             db.session.rollback()
             return False
 
-    def check_all_instances(self) -> Tuple[int, int, int]:
+    def check_all_instances(self, user_id: str = None) -> Tuple[int, int, int]:
         """
-        检查所有实例的连接状态并更新数据库
+        检查实例的连接状态并更新数据库 - 使用并发检测优化性能
+        参数: user_id - 用户ID，如果提供则只检查该用户的实例，否则检查所有实例
         返回: (总数, 正常数, 异常数)
         """
         try:
-            instances = Instance.query.all()
+            if user_id:
+                instances = Instance.query.filter_by(user_id=user_id).all()
+            else:
+                instances = Instance.query.all()
             total_count = len(instances)
             normal_count = 0
             error_count = 0
             
-            logger.info(f"开始检测 {total_count} 个实例的连接状态")
+            if total_count == 0:
+                return 0, 0, 0
             
-            for instance in instances:
-                is_connected, message = self.check_instance_connection(instance)
-                self.update_instance_status(instance, is_connected, message)
+            logger.info(f"开始并发检测 {total_count} 个实例的连接状态")
+            start_time = time.time()
+            
+            # 使用线程池并发检测实例连接状态
+            with ThreadPoolExecutor(max_workers=min(self.max_workers, total_count)) as executor:
+                # 提交所有检测任务
+                future_to_instance = {
+                    executor.submit(self.check_instance_connection, instance): instance 
+                    for instance in instances
+                }
                 
-                if is_connected:
-                    normal_count += 1
-                else:
-                    error_count += 1
+                # 收集检测结果并更新状态
+                for future in as_completed(future_to_instance):
+                    instance = future_to_instance[future]
+                    try:
+                        is_connected, message = future.result()
+                        self.update_instance_status(instance, is_connected, message)
+                        
+                        if is_connected:
+                            normal_count += 1
+                        else:
+                            error_count += 1
+                            
+                    except Exception as e:
+                        logger.error(f"检测实例 {instance.id} 时出错: {e}")
+                        self.update_instance_status(instance, False, f"检测异常: {str(e)}")
+                        error_count += 1
             
-            logger.info(f"实例状态检测完成: 总数={total_count}, 正常={normal_count}, 异常={error_count}")
+            elapsed_time = time.time() - start_time
+            logger.info(f"实例状态检测完成: 总数={total_count}, 正常={normal_count}, 异常={error_count}, 耗时={elapsed_time:.2f}秒")
             return total_count, normal_count, error_count
             
         except Exception as e:

@@ -229,7 +229,7 @@ const ArchitectureOptimization = () => {
   return (
     <div style={{ padding: 24 }}>
       {/* 操作条 */}
-      <Card className="content-card" style={{ marginBottom: 16 }}>
+      <Card className="content-card" style={{ marginBottom: 16, borderRadius: '18px' }}>
         <Space size={12} wrap>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, color: '#1f1f1f', fontSize: 18, letterSpacing: 0.2 }}>
             <DatabaseOutlined style={{ color: '#722ED1', fontSize: 20 }} />
@@ -251,7 +251,7 @@ const ArchitectureOptimization = () => {
       </Card>
 
       {/* 概览 */}
-      <Card className="content-card" style={{ marginBottom: 16 }} bordered>
+      <Card className="content-card" style={{ marginBottom: 16, borderRadius: '18px' }} bordered>
         {!overview ? (
           <div style={{ color: '#8c8c8c' }}>请先选择实例并点击“开始架构检查”。</div>
         ) : (
@@ -286,7 +286,7 @@ const ArchitectureOptimization = () => {
         <Card
           className="content-card"
           title={<span><BulbOutlined style={{ marginRight: 8 }} />AI 架构建议</span>}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 16, borderRadius: '18px' }}
           bordered
         >
           {isAnalyzing ? (
@@ -320,7 +320,7 @@ const ArchitectureOptimization = () => {
       )}
 
       {/* 风险与建议 */}
-      <Card className="content-card" title="风险与建议" bordered>
+      <Card className="content-card" title="风险与建议" style={{ borderRadius: '18px' }} bordered>
         <Table
           size="middle"
           rowKey="key"
@@ -331,7 +331,7 @@ const ArchitectureOptimization = () => {
       </Card>
 
       {/* 慢查询分析 */}
-      <Card className="content-card" title="慢查询分析" style={{ marginTop: 16 }} bordered extra={isSlowAnalyzing ? <Tag color="processing">分析中</Tag> : null}>
+      <Card className="content-card" title="慢查询分析" style={{ marginTop: 16, borderRadius: '18px' }} bordered extra={isSlowAnalyzing ? <Tag color="processing">分析中</Tag> : null}>
         {!slowData ? (
           <div style={{ color: '#8c8c8c' }}>尚无慢日志分析结果。请先点击“开始架构检查”。</div>
         ) : (

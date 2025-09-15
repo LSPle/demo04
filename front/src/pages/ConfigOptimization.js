@@ -181,7 +181,7 @@ const ConfigOptimization = () => {
   return (
     <div style={{ padding: 24 }}>
       {/* 操作条（与架构优化一致的风格） */}
-      <Card className="content-card" style={{ marginBottom: 16 }}>
+      <Card className="content-card" style={{ marginBottom: 16, borderRadius: '18px' }}>
         <Space size={12} wrap>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600, color: '#1f1f1f', fontSize: 18 }}>
             <DatabaseOutlined style={{ color: '#722ED1', fontSize: 20 }} />
@@ -205,7 +205,7 @@ const ConfigOptimization = () => {
       {/* 指标与建议区域 */}
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={14}>
-          <Card title={<span><LineChartOutlined style={{ marginRight: 8, color: '#1677ff' }} />核心性能指标</span>}>
+          <Card title={<span><LineChartOutlined style={{ marginRight: 8, color: '#1677ff' }} />核心性能指标</span>} style={{ borderRadius: '18px' }}>
             {/* 颜色含义提示区域 */}
             <div style={{ 
               marginBottom: 16, 
@@ -293,7 +293,7 @@ const ConfigOptimization = () => {
           </Card>
         </Col>
         <Col xs={24} lg={10}>
-          <Card title={<span><BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />AI 建议</span>}>
+          <Card title={<span><BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />AI 建议</span>} style={{ borderRadius: '18px' }}>
             {adviceStatus === 'loading' && <Skeleton active paragraph={{ rows: 8 }} />}
             {adviceStatus !== 'loading' && (
               <AdviceCard text={advice} status={adviceStatus} />

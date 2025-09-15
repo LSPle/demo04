@@ -59,17 +59,17 @@ class WebSocketService {
         this.attemptReconnect();
       });
 
-      // 监听实例状态变化
-      this.socket.on('instance_status_change', (data) => {
-        console.log('实例状态变化:', data);
-        this.emit('instanceStatusChange', data);
-      });
+      // 已禁用实例状态变化监听
+      // this.socket.on('instance_status_change', (data) => {
+      //   console.log('实例状态变化:', data);
+      //   this.emit('instanceStatusChange', data);
+      // });
 
-      // 监听状态汇总更新
-      this.socket.on('status_summary_update', (data) => {
-        console.log('状态汇总更新:', data);
-        this.emit('statusSummaryUpdate', data);
-      });
+      // 已禁用状态汇总更新监听
+      // this.socket.on('status_summary_update', (data) => {
+      //   console.log('状态汇总更新:', data);
+      //   this.emit('statusSummaryUpdate', data);
+      // });
 
       // 监听所有实例状态更新
       this.socket.on('instances_status_update', (data) => {
@@ -168,15 +168,7 @@ class WebSocketService {
     }
   }
 
-  /**
-   * 获取连接状态
-   */
-  getConnectionStatus() {
-    return {
-      isConnected: this.isConnected,
-      reconnectAttempts: this.reconnectAttempts
-    };
-  }
+  // 已移除getConnectionStatus方法
 }
 
 // 创建全局实例

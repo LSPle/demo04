@@ -205,8 +205,9 @@ class ApiClient {
    * 实例状态检测
    */
   async checkInstanceStatus() {
-    // 监控接口无需 userId（全局）
-    return this.post(API_ENDPOINTS.MONITOR_CHECK);
+    const userId = this.getUserId();
+    const data = userId ? { userId } : {};
+    return this.post(API_ENDPOINTS.MONITOR_CHECK, data);
   }
 
   /**

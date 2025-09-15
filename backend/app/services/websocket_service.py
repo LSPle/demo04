@@ -19,6 +19,10 @@ class WebSocketService:
         # 新增：会话计数与锁
         self._session_lock = Lock()
         self._active_sessions = 0
+        # 动态检测频率配置
+        self.base_interval = 5  # 基础检测间隔（秒）
+        self.min_interval = 3   # 最小检测间隔（秒）
+        self.max_interval = 15  # 最大检测间隔（秒）
         
     def init_socketio(self, socketio: SocketIO, app=None):
         """初始化SocketIO实例"""
@@ -72,7 +76,7 @@ class WebSocketService:
         return count
 
     def _monitor_instances(self):
-        """监控实例状态变化的后台线程"""
+        """监控实例状态变化的后台线程 - 优化版本使用并发检测"""
         from ..services.instance_monitor_service import instance_monitor_service
         from ..models import Instance
         from .. import db
@@ -81,65 +85,51 @@ class WebSocketService:
             try:
                 # 在应用上下文中执行
                 with self.app.app_context():
-                    # 获取当前所有实例状态
-                    instances = Instance.query.all()
-                    current_status = {}
-                    status_changed = False
+                    start_time = time.time()
                     
-                    for instance in instances:
-                        # 检查实例连接状态
-                        is_connected, message = instance_monitor_service.check_instance_connection(instance)
-                        new_status = 'running' if is_connected else 'error'
-                        
-                        current_status[instance.id] = {
-                            'id': instance.id,
-                            'name': instance.instance_name,
-                            'host': instance.host,
-                            'port': instance.port,
-                            'status': new_status,
-                            'message': message,
-                            'timestamp': time.time()
-                        }
-                        
-                        # 检查状态是否发生变化
-                        if (instance.id not in self.last_status or 
-                            self.last_status[instance.id]['status'] != new_status):
-                            
-                            # 更新数据库中的状态
-                            instance_monitor_service.update_instance_status(instance, is_connected, message)
-                            status_changed = True
-                            
-                            # 发送单个实例状态变化通知
-                            self._emit_instance_status_change(current_status[instance.id])
-                            
-                            logger.info(f"实例 {instance.instance_name} 状态变化: {self.last_status.get(instance.id, {}).get('status', 'unknown')} -> {new_status}")
+                    # 使用优化后的并发检测方法
+                    total_count, normal_count, error_count = instance_monitor_service.check_all_instances()
                     
-                    # 如果有状态变化，发送汇总信息
-                    if status_changed:
-                        summary = self._calculate_summary(current_status)
-                        self._emit_status_summary(summary)
+                    if total_count > 0:
+                        # 获取更新后的实例状态
+                        instances = Instance.query.all()
+                        current_status = {}
+                        status_changed = False
                         
-                    self.last_status = current_status
+                        for instance in instances:
+                            new_status = instance.status or 'error'
+                            
+                            current_status[instance.id] = {
+                                'id': instance.id,
+                                'name': instance.instance_name,
+                                'host': instance.host,
+                                'port': instance.port,
+                                'status': new_status,
+                                'message': '连接正常' if new_status == 'running' else '连接异常',
+                                'timestamp': time.time()
+                            }
+                            
+                            # 检查状态是否发生变化
+                            if (instance.id not in self.last_status or 
+                                self.last_status[instance.id]['status'] != new_status):
+                                status_changed = True
+                                logger.info(f"实例 {instance.instance_name} 状态变化: {self.last_status.get(instance.id, {}).get('status', 'unknown')} -> {new_status}")
+                        
+                        self.last_status = current_status
+                        
+                        elapsed_time = time.time() - start_time
+                        logger.debug(f"监控周期完成: 检测{total_count}个实例, 正常{normal_count}, 异常{error_count}, 耗时{elapsed_time:.2f}秒")
                 
             except Exception as e:
                 logger.error(f"监控线程执行出错: {e}")
                 
-            # 每5秒检查一次
-            time.sleep(5)
+            # 动态调整检测间隔
+            sleep_interval = self._calculate_sleep_interval(total_count, elapsed_time if 'elapsed_time' in locals() else 0)
+            time.sleep(sleep_interval)
             
-    def _emit_instance_status_change(self, instance_data: Dict[str, Any]):
-        """发送单个实例状态变化事件"""
-        if self.socketio:
-            self.socketio.emit('instance_status_change', instance_data)
-            logger.info(f"发送实例状态变化事件: {instance_data['name']} -> {instance_data['status']}")
-            logger.debug(f"发送实例状态变化: {instance_data['name']} -> {instance_data['status']}")
-            
-    def _emit_status_summary(self, summary: Dict[str, Any]):
-        """发送状态汇总事件"""
-        if self.socketio:
-            self.socketio.emit('status_summary_update', summary)
-            logger.info(f"发送状态汇总更新: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
-            logger.debug(f"发送状态汇总: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
+    # 已删除未使用的状态变更通知方法
+    # def _emit_instance_status_change(self, instance_data: Dict[str, Any]):
+    # def _emit_status_summary(self, summary: Dict[str, Any]):
             
     def _calculate_summary(self, current_status: Dict[int, Dict[str, Any]]) -> Dict[str, Any]:
         """计算状态汇总信息"""
@@ -154,6 +144,24 @@ class WebSocketService:
             'warning': 0,  # 暂时没有warning状态的逻辑
             'timestamp': time.time()
         }
+        
+    def _calculate_sleep_interval(self, instance_count: int, elapsed_time: float) -> float:
+        """根据实例数量和检测耗时动态计算检测间隔"""
+        # 基于实例数量调整：实例越多，间隔越长
+        if instance_count <= 5:
+            base = self.min_interval
+        elif instance_count <= 20:
+            base = self.base_interval
+        else:
+            base = self.max_interval
+        
+        # 基于检测耗时调整：检测时间越长，间隔越长
+        if elapsed_time > 2:
+            base = min(base * 1.5, self.max_interval)
+        elif elapsed_time > 5:
+            base = self.max_interval
+        
+        return max(self.min_interval, min(base, self.max_interval))
         
     def broadcast_current_status(self):
         """广播当前所有实例状态"""

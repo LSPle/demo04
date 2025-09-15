@@ -20,9 +20,7 @@ export const InstanceProvider = ({ children }) => {
       const instanceList = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
       setInstances(instanceList);
       setLastUpdated(new Date());
-      if (showMessage) {
-        message.success('实例列表已更新');
-      }
+      // 提示已移除：不再弹出“实例列表已更新”成功消息
     } catch (error) {
       console.error('获取实例列表失败:', error);
       if (showMessage) {
@@ -130,13 +128,14 @@ export const InstanceProvider = ({ children }) => {
     };
 
     websocketService.on('instancesStatusUpdate', handleServerUpdate);
-    websocketService.on('instanceStatusChange', handleServerUpdate);
-    websocketService.on('statusSummaryUpdate', handleServerUpdate);
+    // 已禁用状态变更通知监听器
+    // websocketService.on('instanceStatusChange', handleServerUpdate);
+    // websocketService.on('statusSummaryUpdate', handleServerUpdate);
 
     return () => {
       websocketService.off('instancesStatusUpdate', handleServerUpdate);
-      websocketService.off('instanceStatusChange', handleServerUpdate);
-      websocketService.off('statusSummaryUpdate', handleServerUpdate);
+      // websocketService.off('instanceStatusChange', handleServerUpdate);
+      // websocketService.off('statusSummaryUpdate', handleServerUpdate);
     };
   }, [silentRefreshInstances]);
 
