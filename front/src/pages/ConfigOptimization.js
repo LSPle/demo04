@@ -4,6 +4,7 @@ import { DatabaseOutlined, BulbOutlined, LineChartOutlined } from '@ant-design/i
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
 import { useDebounceCallback } from '../hooks/useDebounce';
+import { renderAnalysis } from '../utils/commonUtils';
 
 // 轻量 Markdown 清洗（与其它页面风格一致）
 const stripMarkdownLite = (s) => {
@@ -84,17 +85,52 @@ const getSeverity = (key, rawVal) => {
 
 const AdviceCard = ({ text, status }) => {
   if (status === 'error') {
-    return <Alert type="warning" showIcon message="AI未启用或分析失败" description="DeepSeek未配置或网络超时。可稍后重试。" />;
+    return (
+      <Alert 
+        type="warning" 
+        showIcon 
+        message="AI未启用或分析失败" 
+        description="DeepSeek未配置或网络超时。可稍后重试。" 
+      />
+    );
   }
   if (!text) {
-    return <Alert type="info" showIcon message="暂无AI建议" description="请先执行分析，或稍后重试。" />;
+    return (
+      <Alert 
+        type="info" 
+        showIcon 
+        message="暂无AI建议" 
+        description="请先执行分析，或稍后重试。" 
+      />
+    );
   }
+  
+  // 使用与架构优化页面相同的渲染方式，确保层次清晰
   return (
-    <div style={{ lineHeight: 1.7 }}>
-      {text.split(/\n+/).map((line, idx) => (
-        <div key={idx} style={{ marginBottom: 6 }}>{line}</div>
-      ))}
-    </div>
+    <Alert
+      className="analysis-alert"
+      message={
+        <span style={{ 
+          fontSize: '15px', 
+          fontWeight: 600,
+          color: '#1890ff',
+          display: 'flex',
+          alignItems: 'center'
+        }}>
+          <BulbOutlined style={{ marginRight: 6 }} />
+          配置优化建议
+        </span>
+      }
+      description={renderAnalysis(text)}
+      type="info"
+      showIcon={false}
+      style={{ 
+        marginBottom: 0,
+        borderRadius: '12px',
+        border: '1px solid #e8f4ff',
+        background: 'linear-gradient(135deg, #fafcff 0%, #f0f9ff 100%)'
+      }}
+    />
   );
 };
 
@@ -300,7 +336,30 @@ const ConfigOptimization = () => {
           </Card>
         </Col>
         <Col xs={24} lg={10}>
-          <Card title={<span><BulbOutlined style={{ marginRight: 8, color: '#faad14' }} />AI 建议</span>} style={{ borderRadius: '18px' }}>
+          <Card 
+            title={
+              <span style={{ 
+                color: '#1890ff', 
+                fontSize: '16px', 
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <BulbOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                AI 配置建议
+              </span>
+            } 
+            style={{ 
+              borderRadius: '18px',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+              border: '1px solid #e8f4ff'
+            }}
+            headStyle={{
+              background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
+              borderRadius: '18px 18px 0 0',
+              borderBottom: '1px solid #d6f7ff'
+            }}
+          >
             {adviceStatus === 'loading' && <Skeleton active paragraph={{ rows: 8 }} />}
             {adviceStatus !== 'loading' && (
               <AdviceCard text={advice} status={adviceStatus} />

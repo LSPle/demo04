@@ -248,8 +248,29 @@ const ArchitectureOptimization = () => {
       {(isAnalyzing || hasAnalyzed) && (
         <Card
           className="content-card"
-          title={<span><BulbOutlined style={{ marginRight: 8 }} />AI 架构建议</span>}
-          style={{ marginBottom: 16, borderRadius: '18px' }}
+          title={
+            <span style={{ 
+              color: '#1890ff', 
+              fontSize: '16px', 
+              fontWeight: 600,
+              display: 'flex',
+              alignItems: 'center'
+            }}>
+              <BulbOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+              AI 架构建议
+            </span>
+          }
+          style={{ 
+            marginBottom: 16, 
+            borderRadius: '18px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+            border: '1px solid #e8f4ff'
+          }}
+          headStyle={{
+            background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
+            borderRadius: '18px 18px 0 0',
+            borderBottom: '1px solid #91d5ff'
+          }}
           bordered
         >
           {isAnalyzing ? (
@@ -263,12 +284,27 @@ const ArchitectureOptimization = () => {
           ) : llmAdviceText ? (
             <Alert
               className="analysis-alert"
-              // 原先是“分析与建议”，为避免重复改成更通用的标题
-              message="AI 架构分析"
+              message={
+                <span style={{ 
+                  fontSize: '15px', 
+                  fontWeight: 600,
+                  color: '#1890ff',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <BulbOutlined style={{ marginRight: 6 }} />
+                  架构优化建议与分析
+                </span>
+              }
               description={renderAnalysis(llmAdviceText)}
               type="info"
-              showIcon
-              style={{ marginBottom: 0 }}
+              showIcon={false}
+              style={{ 
+                marginBottom: 0,
+                borderRadius: '12px',
+                border: '1px solid #e8f4ff',
+                background: 'linear-gradient(135deg, #fafcff 0%, #f0f9ff 100%)'
+              }}
             />
           ) : hasAnalyzed ? (
             <Alert

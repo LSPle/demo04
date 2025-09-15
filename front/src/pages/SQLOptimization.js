@@ -224,19 +224,65 @@ const SQLOptimization = () => {
 
           {/* 分析结果 */}
           {optimizationResults && (
-            <Card type="inner" title={<span><BulbOutlined style={{ marginRight: 8 }} />分析结果</span>}
-                  style={{ marginTop: 16 }}>
+            <Card 
+              type="inner" 
+              title={
+                <span style={{ 
+                  color: '#1890ff', 
+                  fontSize: '16px', 
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <BulbOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                  AI 智能分析
+                </span>
+              }
+              style={{ 
+                marginTop: 16,
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                border: '1px solid #e8f4ff'
+              }}
+              headStyle={{
+                background: 'linear-gradient(135deg, #e6f7ff 0%, #bae7ff 100%)',
+                borderRadius: '12px 12px 0 0',
+                borderBottom: '1px solid #91d5ff'
+              }}
+            >
               {optimizationResults.analysis ? (
                 <Alert
                   className="analysis-alert"
-                  message="分析与建议"
+                  message={
+                    <span style={{ 
+                      fontSize: '15px', 
+                      fontWeight: 600,
+                      color: '#1890ff',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}>
+                      <BulbOutlined style={{ marginRight: 6 }} />
+                      SQL优化建议与分析
+                    </span>
+                  }
                   description={renderAnalysis(optimizationResults.analysis)}
                   type="info"
-                  showIcon
-                  style={{ marginBottom: 16 }}
+                  showIcon={false}
+                  style={{ 
+                    marginBottom: 0,
+                    borderRadius: '12px',
+                    border: '1px solid #d6f7ff',
+                    background: 'linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%)'
+                  }}
                 />
               ) : (
-                <Alert message="分析服务不可用" description="DeepSeek API 未配置或服务暂时不可用，请联系管理员配置 API 密钥" type="warning" showIcon style={{ marginBottom: 16 }} />
+                <Alert 
+                  message="分析服务不可用" 
+                  description="DeepSeek API 未配置或服务暂时不可用，请联系管理员配置 API 密钥" 
+                  type="warning" 
+                  showIcon 
+                  style={{ marginBottom: 0 }} 
+                />
               )}
 
               {/* 移除建议SQL展示 */}
