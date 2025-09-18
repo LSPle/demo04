@@ -9,6 +9,9 @@ class WebSocketService {
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 1000;
+    // 添加数据去重机制
+    this.lastUpdateTimestamp = 0;
+    this.lastDataHash = null;
   }
 
   /**
@@ -79,7 +82,14 @@ class WebSocketService {
 
       // 监听所有实例状态更新
       this.socket.on('instances_status_update', (data) => {
-        console.log('所有实例状态更新:', data);
+        console.log('收到实例状态更新:', data);
+        
+        // 数据去重检查
+        if (this.isDuplicateData(data)) {
+          console.log('检测到重复数据，跳过处理');
+          return;
+        }
+        
         this.emit('instances_status_update', data);
       });
 
@@ -172,6 +182,54 @@ class WebSocketService {
         }
       });
     }
+  }
+
+  /**
+   * 检查是否为重复数据
+   * @param {Object} data 接收到的数据
+   * @returns {boolean} 是否为重复数据
+   */
+  isDuplicateData(data) {
+    // 检查时间戳
+    if (data.timestamp && data.timestamp <= this.lastUpdateTimestamp) {
+      return true;
+    }
+    
+    // 生成数据哈希用于比较
+    const dataHash = this.generateDataHash(data);
+    if (dataHash === this.lastDataHash) {
+      return true;
+    }
+    
+    // 更新记录
+    if (data.timestamp) {
+      this.lastUpdateTimestamp = data.timestamp;
+    }
+    this.lastDataHash = dataHash;
+    
+    return false;
+  }
+
+  /**
+   * 生成数据哈希
+   * @param {Object} data 数据对象
+   * @returns {string} 数据哈希值
+   */
+  generateDataHash(data) {
+    // 提取关键数据用于哈希计算
+    const keyData = {
+      instances: data.instances ? data.instances.map(inst => ({
+        id: inst.id,
+        status: inst.status,
+        name: inst.name,
+        host: inst.host,
+        port: inst.port
+      })) : [],
+      summary: data.summary || {}
+    };
+    
+    // 简单的哈希算法
+    return JSON.stringify(keyData);
   }
 
   // 已移除getConnectionStatus方法

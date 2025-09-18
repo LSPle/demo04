@@ -1,41 +1,40 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, Space, Button, message } from 'antd';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Card, Table, Tag, Button, message } from 'antd';
 import {
   DatabaseOutlined,
   PlayCircleOutlined,
   ExclamationCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
-import apiClient from '../utils/apiClient';
 import websocketService from '../services/websocketService';
-import { useInstances } from '../contexts/InstanceContext';
+import instanceService from '../services/instanceService';
 
 const InstanceOverview = () => {
   // 基础状态管理
   const [loading, setLoading] = useState(false);
   const [instances, setInstances] = useState([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [runningCount, setRunningCount] = useState(0);
-  const [errorCount, setErrorCount] = useState(0);
-  const [wsConnected, setWsConnected] = useState(false);
+  
+  // 直接在组件中计算统计数据
+  const { totalCount, runningCount, errorCount } = useMemo(() => {
+    if (!Array.isArray(instances)) {
+      return { totalCount: 0, runningCount: 0, errorCount: 0 };
+    }
+    
+    const totalCount = instances.length;
+    const runningCount = instances.filter(item => item.status === 'running').length;
+    const errorCount = instances.filter(item => 
+      item.status === 'error' || item.status === 'closed'
+    ).length;
+    
+    return { totalCount, runningCount, errorCount };
+  }, [instances]);
 
   // 获取实例列表
   const fetchInstances = async () => {
     try {
       setLoading(true);
-      const data = await apiClient.getInstances();
-      // 处理API响应数据 - 后端直接返回数组
-      const instanceList = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
+      const instanceList = await instanceService.fetchInstances();
       setInstances(instanceList);
-      
-      // 计算统计数据
-      const total = instanceList.length;
-      const running = instanceList.filter(item => item.status === 'running').length;
-      const error = instanceList.filter(item => item.status === 'error' || item.status === 'closed').length;
-      
-      setTotalCount(total);
-      setRunningCount(running);
-      setErrorCount(error);
     } catch (error) {
       console.error('获取实例列表失败:', error);
       message.error('获取实例列表失败');
@@ -49,7 +48,7 @@ const InstanceOverview = () => {
     try {
       setLoading(true);
       message.loading('正在检测实例状态...', 0);
-      const result = await apiClient.checkInstanceStatus();
+      const result = await instanceService.refreshInstanceStatus();
       message.destroy();
       message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
       // 重新获取实例列表
@@ -68,44 +67,26 @@ const InstanceOverview = () => {
     fetchInstances();
   }, []);
 
-  // 移除轮询机制：不再使用定期自动刷新，完全依赖WebSocket实时更新
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     fetchInstances();
-  //   }, 30000); // 30秒轮询一次
-  //
-  //   return () => clearInterval(interval);
-  // }, []);
 
   // WebSocket连接和实时更新
   useEffect(() => {
     // 连接WebSocket
     websocketService.connect();
-    
+
     // 监听连接状态变化
     websocketService.on('connected', () => {
-      setWsConnected(true);
       console.log('WebSocket已连接');
     });
-    
+
     websocketService.on('disconnected', () => {
-      setWsConnected(false);
       console.log('WebSocket已断开');
     });
-    
+
     // 监听实例状态更新
     websocketService.on('instances_status_update', (data) => {
       console.log('收到实例状态更新:', data);
       if (data && Array.isArray(data.instances)) {
         setInstances(data.instances);
-        // 更新统计数据
-        const total = data.instances.length;
-        const running = data.instances.filter(item => item.status === 'running').length;
-        const error = data.instances.filter(item => item.status === 'error' || item.status === 'closed').length;
-        
-        setTotalCount(total);
-        setRunningCount(running);
-        setErrorCount(error);
       }
     });
 
@@ -113,25 +94,16 @@ const InstanceOverview = () => {
     websocketService.on('instance_status_change', (data) => {
       console.log('收到单个实例状态变化:', data);
       if (data && data.instance) {
-        setInstances(prevInstances => {
-          const updatedInstances = prevInstances.map(instance => 
-            instance.id === data.instance.id ? { ...instance, status: data.instance.status } : instance
-          );
-          
-          // 重新计算统计数据
-          const total = updatedInstances.length;
-          const running = updatedInstances.filter(item => item.status === 'running').length;
-          const error = updatedInstances.filter(item => item.status === 'error' || item.status === 'closed').length;
-          
-          setTotalCount(total);
-          setRunningCount(running);
-          setErrorCount(error);
-          
-          return updatedInstances;
-        });
+        setInstances(prevInstances =>
+          prevInstances.map(instance =>
+            instance.id === data.instance.id
+              ? { ...instance, status: data.instance.status }
+              : instance
+          )
+        );
       }
     });
-    
+
     // 清理函数
     return () => {
       websocketService.disconnect();
@@ -216,9 +188,9 @@ const InstanceOverview = () => {
             <h1>实例概览</h1>
             <p>数据库实例运行状态总览</p>
           </div>
-          <Button 
-            type="primary" 
-            icon={<ReloadOutlined />} 
+          <Button
+            type="primary"
+            icon={<ReloadOutlined />}
             onClick={refreshInstanceStatus}
             loading={loading}
           >
@@ -236,18 +208,18 @@ const InstanceOverview = () => {
                 <div className="stat-number" style={{ color: stat.color }}>
                   {stat.value}
                 </div>
-                <div style={{ 
-                  fontSize: '14px', 
-                  color: '#8c8c8c', 
+                <div style={{
+                  fontSize: '14px',
+                  color: '#8c8c8c',
                   fontWeight: '500',
                   marginTop: '4px'
                 }}>
                   {stat.title}
                 </div>
               </div>
-              <div style={{ 
-                fontSize: '32px', 
-                color: stat.color, 
+              <div style={{
+                fontSize: '32px',
+                color: stat.color,
                 opacity: 0.8,
                 marginLeft: '16px'
               }}>

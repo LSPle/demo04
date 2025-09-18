@@ -20,9 +20,9 @@ class WebSocketService:
         self._session_lock = Lock()
         self._active_sessions = 0
         # 动态检测频率配置
-        self.base_interval = 5  # 基础检测间隔（秒）
-        self.min_interval = 3   # 最小检测间隔（秒）
-        self.max_interval = 15  # 最大检测间隔（秒）
+        self.base_interval = 8  # 基础检测间隔（秒）- 增加到8秒减少检测频率
+        self.min_interval = 5   # 最小检测间隔（秒）
+        self.max_interval = 20  # 最大检测间隔（秒）
         
     def init_socketio(self, socketio: SocketIO, app=None):
         """初始化SocketIO实例"""
@@ -95,37 +95,66 @@ class WebSocketService:
                         instances = Instance.query.all()
                         current_status = {}
                         status_changed = False
+                        changed_instances = []
                         
                         for instance in instances:
                             new_status = instance.status or 'error'
                             
                             current_status[instance.id] = {
                                 'id': instance.id,
-                                'name': instance.instance_name,
+                                'instanceName': instance.instance_name,  # 修改字段名以匹配前端期望
                                 'host': instance.host,
                                 'port': instance.port,
+                                'dbType': instance.db_type,  # 添加缺失的数据库类型字段
                                 'status': new_status,
-                                'message': '连接正常' if new_status == 'running' else '连接异常',
-                                'timestamp': time.time()
+                                'message': '连接正常' if new_status == 'running' else '连接异常'
                             }
                             
-                            # 检查状态是否发生变化
-                            if (instance.id not in self.last_status or 
-                                self.last_status[instance.id]['status'] != new_status):
+                            # 更严格的状态变化检测
+                            if instance.id not in self.last_status:
+                                # 新实例
                                 status_changed = True
-                                logger.info(f"实例 {instance.instance_name} 状态变化: {self.last_status.get(instance.id, {}).get('status', 'unknown')} -> {new_status}")
+                                changed_instances.append(instance.instance_name)
+                                logger.info(f"发现新实例: {instance.instance_name} 状态: {new_status}")
+                            else:
+                                old_instance = self.last_status[instance.id]
+                                # 检查关键字段是否发生变化
+                                if (old_instance['status'] != new_status or 
+                                    old_instance['instanceName'] != instance.instance_name or  # 修改字段名
+                                    old_instance['host'] != instance.host or
+                                    old_instance['port'] != instance.port):
+                                    status_changed = True
+                                    changed_instances.append(instance.instance_name)
+                                    logger.info(f"实例 {instance.instance_name} 状态变化: {old_instance['status']} -> {new_status}")
                         
-                        # 如果有状态变化，广播更新
-                        if status_changed:
-                            # 发送实例状态更新
-                            self.socketio.emit('instances_status_update', {
+                        # 检查是否有实例被删除
+                        current_instance_ids = set(current_status.keys())
+                        last_instance_ids = set(self.last_status.keys())
+                        deleted_instances = last_instance_ids - current_instance_ids
+                        
+                        if deleted_instances:
+                            status_changed = True
+                            for deleted_id in deleted_instances:
+                                deleted_name = self.last_status[deleted_id]['instanceName']  # 修改字段名
+                                changed_instances.append(f"{deleted_name}(已删除)")
+                                logger.info(f"实例已删除: {deleted_name}")
+                        
+                        # 只有在真正有变化时才广播更新
+                        if status_changed and changed_instances:
+                            # 添加时间戳以便前端去重
+                            update_data = {
                                 'instances': list(current_status.values()),
-                                'summary': self._calculate_summary(current_status)
-                            })
+                                'summary': self._calculate_summary(current_status),
+                                'timestamp': int(time.time() * 1000),  # 毫秒时间戳
+                                'changed_instances': changed_instances
+                            }
                             
-                            # 发送状态汇总更新
-                            summary = self._calculate_summary(current_status)
-                            logger.info(f"发送状态汇总更新: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
+                            # 发送实例状态更新
+                            self.socketio.emit('instances_status_update', update_data)
+                            
+                            logger.info(f"发送状态更新: 变化实例 {', '.join(changed_instances)}, 总数{update_data['summary']['total']}, 运行{update_data['summary']['running']}, 错误{update_data['summary']['error']}")
+                        else:
+                            logger.debug("实例状态无变化，跳过推送")
                         
                         self.last_status = current_status
                         
@@ -136,7 +165,16 @@ class WebSocketService:
                 logger.error(f"监控线程执行出错: {e}")
                 
             # 动态调整检测间隔
-            sleep_interval = self._calculate_sleep_interval(total_count, elapsed_time if 'elapsed_time' in locals() else 0)
+            elapsed_time = time.time() - start_time
+            if elapsed_time < 2:  # 检测很快完成，可以稍微增加间隔
+                sleep_interval = self._calculate_sleep_interval(total_count, elapsed_time)
+            else:
+                sleep_interval = self.base_interval
+            
+            # 批量更新机制：如果没有状态变化，延长检测间隔
+            if not status_changed:
+                sleep_interval = min(sleep_interval * 1.5, self.max_interval)
+            
             time.sleep(sleep_interval)
             
     # 已删除未使用的状态变更通知方法

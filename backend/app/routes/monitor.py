@@ -18,7 +18,7 @@ def check_instances_status():
         data = request.get_json() or {}
         user_id = data.get('userId')
         
-        total, normal, error = instance_monitor_service.check_all_instances(user_id)
+        total, normal, error = instance_monitor_service.check_all_instances()
         
         return jsonify({
             'message': '实例状态检测完成',

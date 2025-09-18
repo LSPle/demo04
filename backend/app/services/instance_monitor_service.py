@@ -1,6 +1,5 @@
 import logging
 from typing import List, Tuple
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
@@ -16,124 +15,112 @@ logger = logging.getLogger(__name__)
 
 
 class InstanceMonitorService:
-    """实例监控服务：定期检测实例连接状态并更新数据库"""
+    """简化版实例监控服务"""
 
     def __init__(self):
-        self.timeout = 3  # 连接超时时间（秒）- 从5秒优化到3秒
+        self.timeout = 10  # 超时时间10秒
         self.max_workers = 10  # 并发检测线程数
+        self.retry_count = 2  # 重试2次
+        self.failure_counts = {}  # 失败计数器
+        self.failure_threshold = 2  # 连续失败2次才标记异常
 
-    def check_instance_connection(self, instance: Instance, app_context=None) -> Tuple[bool, str]:
-        """
-        检查单个实例的连接状态
-        参数: 
-            instance - 实例对象
-            app_context - Flask应用上下文（用于线程池中的数据库操作）
-        返回: (连接成功标志, 状态描述)
-        """
+    def check_instance_connection(self, instance: Instance) -> Tuple[bool, str]:
+        """检查实例连接状态"""
         if not instance:
             return False, "实例不存在"
         
-        # 目前仅支持 MySQL
+        # 仅支持MySQL
         if (instance.db_type or '').strip() != 'MySQL':
-            return True, "非MySQL实例，跳过检测"  # 暂时认为其他类型实例正常
+            return True, "非MySQL实例，跳过检测"
         
         if not pymysql:
             return False, "MySQL驱动不可用"
         
-        conn = None
-        try:
-            # 尝试建立MySQL连接 - 优化连接参数
-            conn = pymysql.connect(
-                host=instance.host,
-                port=instance.port,
-                user=instance.username or '',
-                password=instance.password or '',
-                charset='utf8mb4',
-                connect_timeout=self.timeout,
-                read_timeout=self.timeout,
-                write_timeout=self.timeout,
-                autocommit=True,  # 自动提交，减少事务开销
-                cursorclass=pymysql.cursors.Cursor  # 使用默认游标类型
-            )
+        # 重试机制
+        for attempt in range(self.retry_count + 1):
+            if attempt > 0:
+                time.sleep(1)  # 重试间隔1秒
             
-            # 执行简单查询验证连接
-            with conn.cursor() as cursor:
-                cursor.execute("SELECT 1")
-                cursor.fetchone()
-            
-            return True, "连接正常"
-            
-        except pymysql.Error as e:
-            logger.warning(f"MySQL连接错误 (ID: {instance.id}, {instance.host}:{instance.port}): {e}")
-            return False, f"MySQL连接失败: {str(e)}"
-        except Exception as e:
-            logger.error(f"实例连接检测异常 (ID: {instance.id}, {instance.host}:{instance.port}): {e}")
-            return False, f"连接检测异常: {str(e)}"
-        finally:
-            # 确保连接被正确关闭
-            if conn:
-                try:
-                    conn.close()
-                except Exception as e:
-                    logger.warning(f"关闭数据库连接时出错: {e}")
+            try:
+                # 建立连接
+                conn = pymysql.connect(
+                    host=instance.host,
+                    port=instance.port,
+                    user=instance.username or '',
+                    password=instance.password or '',
+                    connect_timeout=self.timeout,
+                    autocommit=True
+                )
+                
+                # 测试查询
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                
+                conn.close()
+                
+                # 连接成功，重置失败计数
+                if instance.id in self.failure_counts:
+                    del self.failure_counts[instance.id]
+                
+                return True, "连接正常"
+                
+            except Exception as e:
+                if attempt == self.retry_count:  # 最后一次重试
+                    return False, f"连接失败: {str(e)}"
+        
+        return False, "连接失败"
 
     def update_instance_status(self, instance: Instance, is_connected: bool, message: str = "") -> bool:
-        """
-        更新实例状态
-        返回: 更新成功标志
-        """
+        """更新实例状态 - 状态平滑机制"""
         try:
             if is_connected:
-                # 连接正常，设置为running状态
+                # 连接正常
+                if instance.id in self.failure_counts:
+                    del self.failure_counts[instance.id]
+                
                 if instance.status != 'running':
                     instance.status = 'running'
-                    logger.info(f"实例 {instance.instance_name} ({instance.id}) 状态更新为: running")
+                    logger.info(f"实例 {instance.instance_name} 状态更新为: running")
             else:
-                # 连接失败，设置为error状态（表示无法连接）
-                if instance.status != 'error':
-                    instance.status = 'error'
-                    logger.info(f"实例 {instance.instance_name} ({instance.id}) 状态更新为: error - {message}")
+                # 连接失败，累计失败次数
+                if instance.id not in self.failure_counts:
+                    self.failure_counts[instance.id] = 0
+                
+                self.failure_counts[instance.id] += 1
+                
+                # 连续失败2次才标记为error
+                if self.failure_counts[instance.id] >= self.failure_threshold:
+                    if instance.status != 'error':
+                        instance.status = 'error'
+                        logger.info(f"实例 {instance.instance_name} 连续失败{self.failure_counts[instance.id]}次，状态更新为: error")
             
             db.session.commit()
             return True
             
         except Exception as e:
-            logger.error(f"更新实例状态失败 (ID: {instance.id}): {e}")
+            logger.error(f"更新实例状态失败: {e}")
             db.session.rollback()
             return False
 
-    def check_all_instances(self, user_id: str = None) -> Tuple[int, int, int]:
-        """
-        检查实例的连接状态并更新数据库 - 使用并发检测优化性能
-        参数: user_id - 用户ID，如果提供则只检查该用户的实例，否则检查所有实例
-        返回: (总数, 正常数, 异常数)
-        """
-        from flask import current_app
-        
+    def check_all_instances(self) -> Tuple[int, int, int]:
+        """并发检测所有实例"""
         try:
-            if user_id:
-                instances = Instance.query.filter_by(user_id=user_id).all()
-            else:
-                instances = Instance.query.all()
+            instances = Instance.query.all()
+            if not instances:
+                return 0, 0, 0
+            
             total_count = len(instances)
             normal_count = 0
             error_count = 0
             
-            if total_count == 0:
-                return 0, 0, 0
-            
-            logger.info(f"开始并发检测 {total_count} 个实例的连接状态")
-            start_time = time.time()
-            
-            # 使用线程池并发检测实例连接状态
-            with ThreadPoolExecutor(max_workers=min(self.max_workers, total_count)) as executor:
-                # 提交所有检测任务，传递应用上下文
+            # 并发检测
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 future_to_instance = {
-                    executor.submit(self._check_instance_with_context, instance, current_app._get_current_object()): instance 
+                    executor.submit(self.check_instance_connection, instance): instance
                     for instance in instances
                 }
                 
-                # 收集检测结果并更新状态
                 for future in as_completed(future_to_instance):
                     instance = future_to_instance[future]
                     try:
@@ -150,26 +137,15 @@ class InstanceMonitorService:
                         self.update_instance_status(instance, False, f"检测异常: {str(e)}")
                         error_count += 1
             
-            elapsed_time = time.time() - start_time
-            logger.info(f"实例状态检测完成: 总数={total_count}, 正常={normal_count}, 异常={error_count}, 耗时={elapsed_time:.2f}秒")
+            logger.info(f"实例检测完成: 总数={total_count}, 正常={normal_count}, 异常={error_count}")
             return total_count, normal_count, error_count
             
         except Exception as e:
             logger.error(f"批量检测实例状态失败: {e}")
             return 0, 0, 0
 
-    def _check_instance_with_context(self, instance: Instance, app) -> Tuple[bool, str]:
-        """
-        在应用上下文中检查实例连接状态
-        """
-        with app.app_context():
-            return self.check_instance_connection(instance)
-
     def get_instance_status_summary(self) -> dict:
-        """
-        获取实例状态汇总信息
-        返回: 状态统计字典
-        """
+        """获取实例状态汇总"""
         try:
             instances = Instance.query.all()
             status_counts = {
@@ -184,7 +160,7 @@ class InstanceMonitorService:
                 if status in status_counts:
                     status_counts[status] += 1
                 else:
-                    status_counts['error'] += 1  # 未知状态归为error
+                    status_counts['error'] += 1
             
             return status_counts
             
