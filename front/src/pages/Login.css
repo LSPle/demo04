@@ -62,14 +62,14 @@
 .login-logo {
   display: flex;
   justify-content: center;
-  margin-bottom: 18px; /* 略增与标题距离，更呼吸感 */
+  margin-bottom: 18px;
 }
 
 .logo-icon {
-  width: 148px; /* 原 112px，进一步加宽 */
+  width: 148px;
   height: 64px;
-  padding: 0 12px; /* 略增左右留白 */
-  border-radius: 18px; /* 更圆润的胶囊形 */
+  padding: 0 12px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,7 +80,7 @@
 }
 
 .logo-text {
-  font-weight: 700; /* 原 800，调整为更协调的粗细 */
+  font-weight: 700;
   font-size: 22px;
   letter-spacing: 1px;
   line-height: 1;
@@ -88,6 +88,7 @@
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
+
 .login-title {
   margin: 0;
   font-size: 22px;
@@ -124,24 +125,6 @@
   color: #8c8c8c;
 }
 
-.login-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.remember-checkbox .ant-checkbox-inner {
-  border-radius: 18px !important;
-}
-
-.forgot-password {
-  color: #8c8c8c;
-}
-
-.forgot-password:hover {
-  color: #667eea;
-}
-
 .login-button {
   height: 44px !important;
   border-radius: 18px !important;
@@ -155,26 +138,28 @@
   transform: translateY(-1px);
 }
 
-.login-divider .ant-divider-inner-text {
-  padding: 0 12px;
+/* 动画效果 */
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
 }
 
-.demo-account {
-  background: rgba(102, 126, 234, 0.08);
-  border: 1px dashed rgba(102, 126, 234, 0.25);
-  border-radius: 18px;
-  padding: 12px;
-  color: #595959;
-}
-
-.demo-title {
-  margin: 0 0 4px 0;
-  font-weight: 600;
-  color: #667eea;
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* 响应式 */
 @media (max-width: 576px) {
-  .login-content { padding: 16px; }
-  .login-card { border-radius: 18px !important; }
+  .login-content { 
+    padding: 16px; 
+  }
+  .login-card { 
+    border-radius: 18px !important; 
+  }
 }

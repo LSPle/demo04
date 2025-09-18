@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from 'antd';
 import Sidebar from './components/Layout/Sidebar';
@@ -7,7 +7,6 @@ import InstanceOverview from './pages/InstanceOverview';
 import InstanceManagement from './pages/InstanceManagement';
 import SQLOptimization from './pages/SQLOptimization';
 import SQLConsole from './pages/SQLConsole';
-
 import Login from './pages/Login';
 import ArchitectureOptimization from './pages/ArchitectureOptimization';
 import SlowQueryLogs from './pages/SlowQueryLogs';
@@ -16,13 +15,25 @@ import { InstanceProvider } from './contexts/InstanceContext';
 
 const { Content } = Layout;
 
+// 页面路由配置
+const pageRoutes = {
+  '/overview': <InstanceOverview />,
+  '/management': <InstanceManagement />,
+  '/sql-optimization': <SQLOptimization />,
+  '/sql-console': <SQLConsole />,
+  '/architecture': <ArchitectureOptimization />,
+  '/slowlog': <SlowQueryLogs />,
+  '/config-optimization': <ConfigOptimization />,
+  '/login': <Login />
+};
+
+// 主布局组件
 const AppLayout = ({ children }) => (
   <Layout style={{ minHeight: '100vh' }}>
     <Sidebar />
     <Layout>
       <Header />
       <Content>
-        {/* 直接渲染 children，避免过渡组件导致卸载 */}
         {children}
       </Content>
     </Layout>
@@ -32,82 +43,73 @@ const AppLayout = ({ children }) => (
 const App = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const isAuthenticated = Boolean(localStorage.getItem('userId')); // 根据本地登录态判断
+  const isAuthenticated = Boolean(localStorage.getItem('userId'));
 
-  // 定义顶层路由与页面组件映射（仅一级路径）
-  const routeDefs = useMemo(() => ([
-    { path: '/overview', element: <InstanceOverview /> },
-    { path: '/management', element: <InstanceManagement /> },
-    { path: '/sql-optimization', element: <SQLOptimization /> },
-    { path: '/sql-console', element: <SQLConsole /> },
-    
-    { path: '/architecture', element: <ArchitectureOptimization /> },
-    { path: '/slowlog', element: <SlowQueryLogs /> },
-    { path: '/config-optimization', element: <ConfigOptimization /> },
-    { path: '/login', element: <Login /> },
-  ]), []);
-
-  const basePaths = useMemo(() => routeDefs.map(r => r.path), [routeDefs]);
-
-  const getBasePath = (pathname) => {
-    // 按最长前缀匹配，确保 /sql-console 等被正确识别
-    const match = basePaths
-      .filter(p => pathname.startsWith(p))
-      .sort((a, b) => b.length - a.length)[0];
-    return match || '/login';
+  // 获取当前页面路径
+  const getCurrentPage = () => {
+    const pathname = location.pathname;
+    // 如果是根路径，返回登录页
+    if (pathname === '/') return '/login';
+    // 查找匹配的路由
+    return Object.keys(pageRoutes).find(route => pathname.startsWith(route)) || '/login';
   };
 
-  const activeBasePath = getBasePath(location.pathname);
+  const currentPage = getCurrentPage();
 
-  // 访问过的页面集合（保持已挂载的页面不被卸载，实现持久化）
-  const [visited, setVisited] = useState(() => new Set([activeBasePath]));
-  useEffect(() => {
-    setVisited(prev => {
-      if (prev.has(activeBasePath)) return prev;
-      const next = new Set(prev);
-      next.add(activeBasePath);
-      return next;
-    });
-  }, [activeBasePath]);
+  // Keep-Alive: 记录已访问的页面
+  const [visitedPages, setVisitedPages] = useState([currentPage]);
 
-  // 初始重定向：从根路径跳转到 /login
+  // 当页面变化时，添加到已访问列表
   useEffect(() => {
+    if (!visitedPages.includes(currentPage)) {
+      setVisitedPages(prev => [...prev, currentPage]);
+    }
+  }, [currentPage, visitedPages]);
+
+  // 登录检查和重定向
+  useEffect(() => {
+    // 根路径重定向到登录页
     if (location.pathname === '/') {
       navigate('/login', { replace: true });
+      return;
     }
-  }, [location.pathname, navigate]);
 
-  // 简单的登录守卫：未登录时跳转到 /login
-  useEffect(() => {
-    if (!isAuthenticated && activeBasePath !== '/login') {
+    // 未登录时跳转到登录页
+    if (!isAuthenticated && currentPage !== '/login') {
       navigate('/login', { replace: true });
     }
-  }, [isAuthenticated, activeBasePath, navigate]);
+  }, [location.pathname, isAuthenticated, currentPage, navigate]);
 
-  // 仅渲染访问过的页面，并根据当前激活路径显示/隐藏
-  const keepAliveViews = Array.from(visited)
-    .map((p) => {
-      const def = routeDefs.find(r => r.path === p);
-      if (!def) return null;
-      const isActive = p === activeBasePath;
+  // 渲染所有访问过的页面（Keep-Alive）
+  const renderPages = () => {
+    return visitedPages.map(pagePath => {
+      const pageComponent = pageRoutes[pagePath];
+      const isActive = pagePath === currentPage;
+      
       return (
-        <div key={p} style={{ display: isActive ? 'block' : 'none', height: '100%' }}>
-          {def.element}
+        <div 
+          key={pagePath}
+          style={{ 
+            display: isActive ? 'block' : 'none',
+            height: '100%'
+          }}
+        >
+          {pageComponent}
         </div>
       );
-    })
-    .filter(Boolean);
+    });
+  };
 
-  // 如果当前是登录页面，直接渲染登录组件，不使用AppLayout
-  if (activeBasePath === '/login') {
-    return keepAliveViews;
+  // 如果是登录页，直接返回登录组件
+  if (currentPage === '/login') {
+    return renderPages();
   }
 
-  // 其他页面使用AppLayout包装
+  // 其他页面用AppLayout包装
   return (
     <InstanceProvider>
       <AppLayout>
-        {keepAliveViews}
+        {renderPages()}
       </AppLayout>
     </InstanceProvider>
   );

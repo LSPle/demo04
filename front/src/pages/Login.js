@@ -1,84 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { Form, Input, Button, Card, Checkbox, message, Divider } from 'antd';
+import React, { useState } from 'react';
+import { Form, Input, Button, Card, message } from 'antd';
 import { UserOutlined, LockOutlined, EyeTwoTone, EyeInvisibleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import API_BASE_URL from '../config/api';
 import './Login.css';
 
 const Login = () => {
-  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [isRegister, setIsRegister] = useState(false);
   const navigate = useNavigate();
 
-  // 初次加载时尝试填充已记住的用户名
-  useEffect(() => {
-    const savedUsername = localStorage.getItem('rememberedUsername');
-    if (savedUsername) {
-      form.setFieldsValue({ username: savedUsername, remember: true });
-    }
-  }, [form]);
-
-  const handleForgotPassword = (e) => {
-    e.preventDefault();
-    message.info('请寻找管理员获取密码');
-  };
-
-  const handleLogin = async (values) => {
+  const handleSubmit = async (values) => {
     setLoading(true);
     try {
-      if (isRegister) {
-        // 注册
-        const resp = await fetch(`${API_BASE_URL}/api/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username: values.username, password: values.password })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data?.message || '注册失败');
-        message.success('注册成功，请继续登录');
-        setIsRegister(false);
-        return;
-      }
-
-      // 登录
-      const resp = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      const url = isRegister ? '/api/auth/register' : '/api/auth/login';
+      const response = await fetch(`${API_BASE_URL}${url}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: values.username, password: values.password })
+        body: JSON.stringify(values)
       });
-      const data = await resp.json();
-      if (!resp.ok) throw new Error(data?.message || '登录失败');
 
-      const user = data?.user;
-      if (!user || !user.id) throw new Error('登录响应异常');
+      const data = await response.json();
 
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('username', user.username || values.username);
-      localStorage.setItem('userId', String(user.id));
-      // 可选保存 token（当前方案不做鉴权使用）
-      if (data?.access_token) localStorage.setItem('token', data.access_token);
-
-      // 记住我：仅保存用户名（不保存密码以保障安全）
-      if (values.remember) {
-        localStorage.setItem('rememberedUsername', values.username);
-        localStorage.setItem('rememberMe', 'true');
-      } else {
-        localStorage.removeItem('rememberedUsername');
-        localStorage.removeItem('rememberMe');
+      if (!response.ok) {
+        throw new Error(data?.message || '操作失败');
       }
 
-      message.success('登录成功！');
-      navigate('/overview');
+      if (isRegister) {
+        message.success('注册成功，请登录');
+        setIsRegister(false);
+      } else {
+        // 登录成功，保存用户信息
+        localStorage.setItem('userId', data.user.id);
+        localStorage.setItem('username', data.user.username);
+        message.success('登录成功');
+        navigate('/overview');
+      }
     } catch (error) {
-      message.error('登录失败，请重试！');
+      message.error(error.message);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleLoginFailed = (errorInfo) => {
-    message.error('请检查输入信息');
   };
 
   return (
@@ -86,7 +48,7 @@ const Login = () => {
       <div className="login-background">
         <div className="login-overlay"></div>
       </div>
-      
+
       <div className="login-content">
         <Card className="login-card fade-in-up">
           <div className="login-header">
@@ -100,19 +62,15 @@ const Login = () => {
           </div>
 
           <Form
-            form={form}
             name="login"
             size="large"
-            onFinish={handleLogin}
-            onFinishFailed={handleLoginFailed}
+            onFinish={handleSubmit}
             autoComplete="off"
             className="login-form"
           >
             <Form.Item
               name="username"
-              rules={[
-                { required: true, message: '请输入用户名！' }
-              ]}
+              rules={[{ required: true, message: '请输入用户名！' }]}
             >
               <Input
                 prefix={<UserOutlined className="input-icon" />}
@@ -123,29 +81,16 @@ const Login = () => {
 
             <Form.Item
               name="password"
-              rules={[
-                { required: true, message: '请输入密码！' }
-              ]}
+              rules={[{ required: true, message: '请输入密码！' }]}
             >
               <Input.Password
                 prefix={<LockOutlined className="input-icon" />}
                 placeholder="密码"
                 className="login-input"
-                iconRender={(visible) => 
+                iconRender={(visible) =>
                   visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
                 }
               />
-            </Form.Item>
-
-            <Form.Item>
-              <div className="login-options">
-                <Form.Item name="remember" valuePropName="checked" noStyle>
-                  <Checkbox className="remember-checkbox">记住我</Checkbox>
-                </Form.Item>
-                <a className="forgot-password" href="#forgot" onClick={handleForgotPassword}>
-                  忘记密码？
-                </a>
-              </div>
             </Form.Item>
 
             <Form.Item>
@@ -161,13 +106,10 @@ const Login = () => {
             </Form.Item>
 
             <div style={{ textAlign: 'center' }}>
-              <Button type="link" onClick={() => setIsRegister(v => !v)}>
+              <Button type="link" onClick={() => setIsRegister(!isRegister)}>
                 {isRegister ? '已有账号？去登录' : '没有账号？去注册'}
               </Button>
             </div>
-
-           
-            
           </Form>
         </Card>
       </div>
