@@ -22,9 +22,12 @@ class InstanceMonitorService:
         self.timeout = 3  # 连接超时时间（秒）- 从5秒优化到3秒
         self.max_workers = 10  # 并发检测线程数
 
-    def check_instance_connection(self, instance: Instance) -> Tuple[bool, str]:
+    def check_instance_connection(self, instance: Instance, app_context=None) -> Tuple[bool, str]:
         """
         检查单个实例的连接状态
+        参数: 
+            instance - 实例对象
+            app_context - Flask应用上下文（用于线程池中的数据库操作）
         返回: (连接成功标志, 状态描述)
         """
         if not instance:
@@ -105,6 +108,8 @@ class InstanceMonitorService:
         参数: user_id - 用户ID，如果提供则只检查该用户的实例，否则检查所有实例
         返回: (总数, 正常数, 异常数)
         """
+        from flask import current_app
+        
         try:
             if user_id:
                 instances = Instance.query.filter_by(user_id=user_id).all()
@@ -122,9 +127,9 @@ class InstanceMonitorService:
             
             # 使用线程池并发检测实例连接状态
             with ThreadPoolExecutor(max_workers=min(self.max_workers, total_count)) as executor:
-                # 提交所有检测任务
+                # 提交所有检测任务，传递应用上下文
                 future_to_instance = {
-                    executor.submit(self.check_instance_connection, instance): instance 
+                    executor.submit(self._check_instance_with_context, instance, current_app._get_current_object()): instance 
                     for instance in instances
                 }
                 
@@ -152,6 +157,13 @@ class InstanceMonitorService:
         except Exception as e:
             logger.error(f"批量检测实例状态失败: {e}")
             return 0, 0, 0
+
+    def _check_instance_with_context(self, instance: Instance, app) -> Tuple[bool, str]:
+        """
+        在应用上下文中检查实例连接状态
+        """
+        with app.app_context():
+            return self.check_instance_connection(instance)
 
     def get_instance_status_summary(self) -> dict:
         """

@@ -199,3 +199,17 @@ dmypy.json
 # Project specific
 data/
 !data/.gitkeep
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+database.db
+
+# Test and simulation scripts
+backend/test_*.py
+backend/simulate_*.py
+backend/create_test_*.py
+
+# Python cache files in routes
+backend/app/routes/__pycache__/

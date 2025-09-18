@@ -34,6 +34,9 @@ class WebSocketService {
         this.isConnected = true;
         this.reconnectAttempts = 0;
         
+        // 触发连接成功事件
+        this.emit('connected');
+        
         // 请求当前状态
         this.requestStatusUpdate();
       });
@@ -42,6 +45,9 @@ class WebSocketService {
       this.socket.on('disconnect', (reason) => {
         console.log('WebSocket连接断开:', reason);
         this.isConnected = false;
+        
+        // 触发断开连接事件
+        this.emit('disconnected');
         
         // 如果是意外断开，尝试重连
         if (reason === 'io server disconnect') {
@@ -59,22 +65,22 @@ class WebSocketService {
         this.attemptReconnect();
       });
 
-      // 已禁用实例状态变化监听
-      // this.socket.on('instance_status_change', (data) => {
-      //   console.log('实例状态变化:', data);
-      //   this.emit('instanceStatusChange', data);
-      // });
+      // 监听实例状态变化
+      this.socket.on('instance_status_change', (data) => {
+        console.log('实例状态变化:', data);
+        this.emit('instance_status_change', data);
+      });
 
-      // 已禁用状态汇总更新监听
-      // this.socket.on('status_summary_update', (data) => {
-      //   console.log('状态汇总更新:', data);
-      //   this.emit('statusSummaryUpdate', data);
-      // });
+      // 监听状态汇总更新
+      this.socket.on('status_summary_update', (data) => {
+        console.log('状态汇总更新:', data);
+        this.emit('status_summary_update', data);
+      });
 
       // 监听所有实例状态更新
       this.socket.on('instances_status_update', (data) => {
         console.log('所有实例状态更新:', data);
-        this.emit('instancesStatusUpdate', data);
+        this.emit('instances_status_update', data);
       });
 
     } catch (error) {

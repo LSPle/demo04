@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Table, Tag, Space, Button, message } from 'antd';
 import {
   DatabaseOutlined,
@@ -7,60 +7,43 @@ import {
   ReloadOutlined
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
-// 移除直接使用 websocketService，统一由 InstanceContext 管理
-// import websocketService from '../services/websocketService';
+import websocketService from '../services/websocketService';
 import { useInstances } from '../contexts/InstanceContext';
-import { getStatusTag } from '../utils/commonUtils';
 
 const InstanceOverview = () => {
-   // 状态管理
+  // 基础状态管理
   const [loading, setLoading] = useState(false);
-   const [statsData, setStatsData] = useState([
-     {
-       title: '总实例数',
-       value: 0,
-       color: '#1890ff',
-       icon: <DatabaseOutlined />
-     },
-     {
-       title: '运行中',
-       value: 0,
-       color: '#52c41a',
-       icon: <PlayCircleOutlined />
-     },
-     {
-       title: '异常实例',
-       value: 0,
-       color: '#ff4d4f',
-       icon: <ExclamationCircleOutlined />
-     }
-   ]);
-   
-   // 已移除wsConnected状态变量
+  const [instances, setInstances] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [runningCount, setRunningCount] = useState(0);
+  const [errorCount, setErrorCount] = useState(0);
+  const [wsConnected, setWsConnected] = useState(false);
 
-  // 订阅全局实例上下文
-  const { instances, loading: instancesLoading, silentRefreshInstances } = useInstances();
+  // 获取实例列表
+  const fetchInstances = async () => {
+    try {
+      setLoading(true);
+      const data = await apiClient.getInstances();
+      // 处理API响应数据 - 后端直接返回数组
+      const instanceList = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
+      setInstances(instanceList);
+      
+      // 计算统计数据
+      const total = instanceList.length;
+      const running = instanceList.filter(item => item.status === 'running').length;
+      const error = instanceList.filter(item => item.status === 'error' || item.status === 'closed').length;
+      
+      setTotalCount(total);
+      setRunningCount(running);
+      setErrorCount(error);
+    } catch (error) {
+      console.error('获取实例列表失败:', error);
+      message.error('获取实例列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // 将上下文中的实例映射为当前页面展示结构
-  const formattedData = useMemo(() => {
-    return (instances || []).map(instance => ({
-      key: instance.id,
-      name: instance.instanceName,
-      // 保留 ip 以兼容，但页面展示改为基于 host/port 渲染
-      ip: `${instance.host}:${instance.port}`,
-      host: instance.host,
-      port: instance.port,
-      type: instance.dbType,
-      status: instance.status,
-      connectionInfo: {
-        host: instance.host,
-        port: instance.port,
-        username: instance.username,
-        password: instance.password
-      }
-    }));
-  }, [instances]);
- 
   // 刷新实例状态
   const refreshInstanceStatus = async () => {
     try {
@@ -69,7 +52,8 @@ const InstanceOverview = () => {
       const result = await apiClient.checkInstanceStatus();
       message.destroy();
       message.success(`状态检测完成：总数${result.total}，正常${result.normal}，异常${result.error}`);
-      await silentRefreshInstances();
+      // 重新获取实例列表
+      await fetchInstances();
     } catch (error) {
       message.destroy();
       console.error('刷新实例状态失败:', error);
@@ -78,108 +62,219 @@ const InstanceOverview = () => {
       setLoading(false);
     }
   };
- 
-  // 当数据变化时更新统计
+
+  // 页面加载时获取数据
   useEffect(() => {
-    updateStatsData(formattedData);
-  }, [formattedData]);
- 
-   // 更新统计数据
-   const updateStatsData = (instances) => {
-     const totalCount = instances.length;
-     const runningCount = instances.filter(item => item.status === 'running').length;
-     const errorCount = instances.filter(item => item.status === 'error' || item.status === 'closed').length;
- 
-     setStatsData(prevStats => prevStats.map((stat, index) => {
-       const values = [totalCount, runningCount, errorCount];
-       return {
-         ...stat,
-         value: values[index]
-       };
-     }));
-   };
- 
-  // 移除页面内 WebSocket 订阅，交由 InstanceContext 统一处理
+    fetchInstances();
+  }, []);
+
+  // 移除轮询机制：不再使用定期自动刷新，完全依赖WebSocket实时更新
   // useEffect(() => {
-  //   websocketService.connect();
-  //   const handleInstancesStatusUpdate = () => {
-  //     silentRefreshInstances();
-  //   };
-  //   websocketService.on('instancesStatusUpdate', handleInstancesStatusUpdate);
-  //   return () => websocketService.off('instancesStatusUpdate', handleInstancesStatusUpdate);
-  // }, [silentRefreshInstances]);
- 
-   const columns = [
-     {
-       title: '实例名称',
-       dataIndex: 'name',
-       key: 'name',
-       width: 200,
-       ellipsis: true,
-     },
-     {
-       title: '连接地址',
-       key: 'address',
-       width: 150,
-       render: (_, record) => {
-         const host = record.host ?? record.connectionInfo?.host ?? '-';
-         const port = record.port ?? record.connectionInfo?.port ?? '-';
-         return `${host}:${port}`;
-       },
-     },
-     {
-       title: '数据库类型',
-       dataIndex: 'type',
-       key: 'type',
-       width: 120,
-     },
-     {
-       title: '状态',
-       dataIndex: 'status',
-       key: 'status',
-       width: 100,
-       render: (status) => getStatusTag(status),
-     },
-   ];
- 
-   return (
-     <div className="fade-in-up">
-       {/* 页面标题 */}
-       <div className="page-header">
-         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-           <div>
-             <h1>实例概览</h1>
-             <p>数据库实例运行状态总览</p>
-           </div>
-           <Button 
-             type="primary" 
-             icon={<ReloadOutlined />} 
-             onClick={refreshInstanceStatus}
-             loading={loading || instancesLoading}
-           >
-             刷新状态
-           </Button>
-         </div>
-       </div>
- 
-       {/* 数据库实例列表 */}
-       <Card className="content-card" style={{ borderRadius: '18px' }}>
-         <Table
-           columns={columns}
-           dataSource={formattedData}
-           loading={loading || instancesLoading}
-           pagination={{
-             current: 1,
-             pageSize: 10,
-             total: formattedData.length,
-             showSizeChanger: true,
-             showQuickJumper: true,
-             showTotal: (total, range) => `显示 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
-           }}
-         />
-       </Card>
-     </div>
-   );
- };
- 
- export default InstanceOverview;
+  //   const interval = setInterval(() => {
+  //     fetchInstances();
+  //   }, 30000); // 30秒轮询一次
+  //
+  //   return () => clearInterval(interval);
+  // }, []);
+
+  // WebSocket连接和实时更新
+  useEffect(() => {
+    // 连接WebSocket
+    websocketService.connect();
+    
+    // 监听连接状态变化
+    websocketService.on('connected', () => {
+      setWsConnected(true);
+      console.log('WebSocket已连接');
+    });
+    
+    websocketService.on('disconnected', () => {
+      setWsConnected(false);
+      console.log('WebSocket已断开');
+    });
+    
+    // 监听实例状态更新
+    websocketService.on('instances_status_update', (data) => {
+      console.log('收到实例状态更新:', data);
+      if (data && Array.isArray(data.instances)) {
+        setInstances(data.instances);
+        // 更新统计数据
+        const total = data.instances.length;
+        const running = data.instances.filter(item => item.status === 'running').length;
+        const error = data.instances.filter(item => item.status === 'error' || item.status === 'closed').length;
+        
+        setTotalCount(total);
+        setRunningCount(running);
+        setErrorCount(error);
+      }
+    });
+
+    // 监听单个实例状态变化
+    websocketService.on('instance_status_change', (data) => {
+      console.log('收到单个实例状态变化:', data);
+      if (data && data.instance) {
+        setInstances(prevInstances => {
+          const updatedInstances = prevInstances.map(instance => 
+            instance.id === data.instance.id ? { ...instance, status: data.instance.status } : instance
+          );
+          
+          // 重新计算统计数据
+          const total = updatedInstances.length;
+          const running = updatedInstances.filter(item => item.status === 'running').length;
+          const error = updatedInstances.filter(item => item.status === 'error' || item.status === 'closed').length;
+          
+          setTotalCount(total);
+          setRunningCount(running);
+          setErrorCount(error);
+          
+          return updatedInstances;
+        });
+      }
+    });
+    
+    // 清理函数
+    return () => {
+      websocketService.disconnect();
+    };
+  }, []);
+
+  // 状态标签显示
+  const getStatusTag = (status) => {
+    if (status === 'running') {
+      return <Tag color="green">运行中</Tag>;
+    } else if (status === 'error') {
+      return <Tag color="red">异常</Tag>;
+    } else if (status === 'closed') {
+      return <Tag color="red">已关闭</Tag>;
+    } else {
+      return <Tag color="gray">未知</Tag>;
+    }
+  };
+
+  // 表格列配置
+  const columns = [
+    {
+      title: '实例名称',
+      dataIndex: 'instanceName',
+      key: 'instanceName',
+      width: 200,
+    },
+    {
+      title: '连接地址',
+      key: 'address',
+      width: 150,
+      render: (_, record) => {
+        return `${record.host}:${record.port}`;
+      },
+    },
+    {
+      title: '数据库类型',
+      dataIndex: 'dbType',
+      key: 'dbType',
+      width: 120,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 100,
+      render: (status) => getStatusTag(status),
+    },
+  ];
+
+  // 统计卡片数据
+  const statsCards = [
+    {
+      title: '总实例数',
+      value: totalCount,
+      color: '#1890ff',
+      icon: <DatabaseOutlined />,
+      cardClass: 'stat-card'
+    },
+    {
+      title: '运行中',
+      value: runningCount,
+      color: '#52c41a',
+      icon: <PlayCircleOutlined />,
+      cardClass: 'stat-card success'
+    },
+    {
+      title: '异常实例',
+      value: errorCount,
+      color: '#ff4d4f',
+      icon: <ExclamationCircleOutlined />,
+      cardClass: 'stat-card error'
+    }
+  ];
+
+  return (
+    <div className="fade-in-up">
+      {/* 页面标题 */}
+      <div className="page-header">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1>实例概览</h1>
+            <p>数据库实例运行状态总览</p>
+          </div>
+          <Button 
+            type="primary" 
+            icon={<ReloadOutlined />} 
+            onClick={refreshInstanceStatus}
+            loading={loading}
+          >
+            刷新状态
+          </Button>
+        </div>
+      </div>
+
+      {/* 统计卡片 */}
+      <div className="stats-grid">
+        {statsCards.map((stat, index) => (
+          <div key={index} className={stat.cardClass}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div className="stat-number" style={{ color: stat.color }}>
+                  {stat.value}
+                </div>
+                <div style={{ 
+                  fontSize: '14px', 
+                  color: '#8c8c8c', 
+                  fontWeight: '500',
+                  marginTop: '4px'
+                }}>
+                  {stat.title}
+                </div>
+              </div>
+              <div style={{ 
+                fontSize: '32px', 
+                color: stat.color, 
+                opacity: 0.8,
+                marginLeft: '16px'
+              }}>
+                {stat.icon}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 数据库实例列表 */}
+      <Card className="content-card" style={{ borderRadius: '18px' }}>
+        <Table
+          columns={columns}
+          dataSource={instances}
+          loading={loading}
+          rowKey="id"
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total, range) => `显示 ${range[0]}-${range[1]} 条，共 ${total} 条记录`
+          }}
+        />
+      </Card>
+    </div>
+  );
+};
+
+export default InstanceOverview;

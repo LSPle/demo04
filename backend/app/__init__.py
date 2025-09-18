@@ -101,8 +101,8 @@ def create_app():
     # Register WebSocket events
     register_websocket_events()
     
-    # （修改）不在启动时自动开启监控线程，改为登录后按需启动
-    # 原：websocket_service.start_monitoring()
+    # 启动监控服务（恢复自动启动）
+    websocket_service.start_monitoring()
     
     return app
 

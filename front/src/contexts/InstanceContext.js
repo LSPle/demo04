@@ -127,26 +127,26 @@ export const InstanceProvider = ({ children }) => {
       silentRefreshInstances();
     };
 
-    websocketService.on('instancesStatusUpdate', handleServerUpdate);
-    // 已禁用状态变更通知监听器
-    // websocketService.on('instanceStatusChange', handleServerUpdate);
-    // websocketService.on('statusSummaryUpdate', handleServerUpdate);
+    // 修复事件名称匹配问题：使用下划线格式与后端保持一致
+    websocketService.on('instances_status_update', handleServerUpdate);
+    websocketService.on('instance_status_change', handleServerUpdate);
+    websocketService.on('status_summary_update', handleServerUpdate);
 
     return () => {
-      websocketService.off('instancesStatusUpdate', handleServerUpdate);
-      // websocketService.off('instanceStatusChange', handleServerUpdate);
-      // websocketService.off('statusSummaryUpdate', handleServerUpdate);
+      websocketService.off('instances_status_update', handleServerUpdate);
+      websocketService.off('instance_status_change', handleServerUpdate);
+      websocketService.off('status_summary_update', handleServerUpdate);
     };
   }, [silentRefreshInstances]);
 
-  // 定期自动刷新实例列表（每30秒）
-  useEffect(() => {
-    const interval = setInterval(() => {
-      silentRefreshInstances();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [silentRefreshInstances]);
+  // 移除轮询机制：不再使用定期自动刷新，完全依赖WebSocket实时更新
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     silentRefreshInstances();
+  //   }, 30000);
+  //
+  //   return () => clearInterval(interval);
+  // }, [silentRefreshInstances]);
 
   // 订阅 WebSocketService 的本地事件总线，进行增量更新
   useEffect(() => {

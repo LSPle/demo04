@@ -115,6 +115,18 @@ class WebSocketService:
                                 status_changed = True
                                 logger.info(f"实例 {instance.instance_name} 状态变化: {self.last_status.get(instance.id, {}).get('status', 'unknown')} -> {new_status}")
                         
+                        # 如果有状态变化，广播更新
+                        if status_changed:
+                            # 发送实例状态更新
+                            self.socketio.emit('instances_status_update', {
+                                'instances': list(current_status.values()),
+                                'summary': self._calculate_summary(current_status)
+                            })
+                            
+                            # 发送状态汇总更新
+                            summary = self._calculate_summary(current_status)
+                            logger.info(f"发送状态汇总更新: 总数{summary['total']}, 运行{summary['running']}, 错误{summary['error']}")
+                        
                         self.last_status = current_status
                         
                         elapsed_time = time.time() - start_time
