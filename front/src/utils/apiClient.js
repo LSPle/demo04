@@ -20,9 +20,11 @@ class ApiClient {
 
   appendUserId(url) {
     const uid = this.getUserId();
+    // console.log('appendUserId', uid);   
     if (!uid) return url;
     return url.includes('?') ? `${url}&userId=${encodeURIComponent(uid)}` : `${url}?userId=${encodeURIComponent(uid)}`;
   }
+
 
   /**
    * 通用请求方法
