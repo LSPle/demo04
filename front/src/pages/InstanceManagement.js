@@ -46,9 +46,12 @@ const InstanceManagement = () => {
 
   // 移除页面内的 WebSocket 订阅，改由 InstanceContext 统一管理
   // useEffect(() => { websocketService.connect(); ... }, []);
-
+  
+  //编辑实例函数
   const handleEdit = (record) => {
+    console.log('handleEdit', record);
     setEditingInstance(record);
+    //调用Ant Design组件
     form.setFieldsValue({
       instanceName: record.name,
       host: record.host,
@@ -60,22 +63,23 @@ const InstanceManagement = () => {
     setIsModalVisible(true);
   };
 
+  //删除实例
   const handleDelete = async (instanceId) => {
     try {
-      await apiClient.deleteInstance(instanceId);
+      await apiClient.deleteInstance(instanceId);  //调用api删除实例
       message.success('删除成功');
-      await silentRefreshInstances();
+      await silentRefreshInstances();  //刷新实例列
     } catch (error) {
       message.error('删除失败');
     }
   };
-
+ //批量删除实例
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) {
       message.warning('请选择要删除的实例');
       return;
     }
-    
+    //组件弹窗
     Modal.confirm({
       title: '确认删除',
       content: `确定要删除选中的 ${selectedRowKeys.length} 个实例吗？`,
@@ -92,22 +96,33 @@ const InstanceManagement = () => {
     });
   };
 
+  //添加实例：重置添加表格
   const handleAdd = () => {
     setEditingInstance(null);
     form.resetFields();
     setIsModalVisible(true);
   };
-
+ //点击保存实例
   const handleModalOk = async () => {
     try {
-      const values = await form.validateFields();
+      const values = await form.validateFields();  //验证实例
       setLoading(true);
       
+      // 字段映射转换
+      const apiData = {
+        name: values.instanceName,  // 映射字段名
+        host: values.host,
+        port: values.port,
+        type: values.dbType,        // 映射字段名
+        username: values.username,
+        password: values.password,
+      };
+      
       if (editingInstance) {
-        await apiClient.updateInstance(editingInstance.key, values);
+        await apiClient.updateInstance(editingInstance.key, apiData);
         message.success('更新成功');
       } else {
-        await apiClient.addInstance(values);
+        await apiClient.createInstance(apiData);  // 修正方法名
         message.success('添加成功');
       }
       
@@ -279,7 +294,7 @@ const InstanceManagement = () => {
           layout="vertical"
           style={{ marginTop: 16 }}
           initialValues={{
-            dbType: 'mysql',
+            dbType: 'MySQL',
             port: 3306,
           }}
         >
@@ -300,10 +315,10 @@ const InstanceManagement = () => {
             rules={[{ required: true, message: '请选择数据库类型' }]}
           >
             <Select placeholder="请选择数据库类型">
-              <Option value="mysql">MySQL</Option>
-              <Option value="postgresql">PostgreSQL</Option>
-              <Option value="oracle">Oracle</Option>
-              <Option value="sqlserver">SQL Server</Option>
+              <Option value="MySQL">MySQL</Option>
+              <Option value="PostgreSQL">PostgreSQL</Option>
+              <Option value="Oracle">Oracle</Option>
+              <Option value="SQL Server">SQL Server</Option>
             </Select>
           </Form.Item>
 
