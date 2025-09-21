@@ -3,8 +3,9 @@ import { Card, Table, Button, Space, Modal, Form, message, InputNumber, Select, 
 import { DatabaseOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { getStatusTag } from '../utils/commonUtils';
+//获取实例数据
 import apiClient from '../utils/apiClient';
-import { useInstances } from '../contexts/InstanceContext';
+import { useInstances } from '../contexts/InstanceContext';   
 
 const { Option } = Select;
 
@@ -16,6 +17,10 @@ const InstanceManagement = () => {
   const [editingInstance, setEditingInstance] = useState(null);
   
   const { instances, loading: instancesLoading, silentRefreshInstances } = useInstances();
+  // 在组件开始处添加
+  console.log('组件渲染 - instancesLoading:', instancesLoading, 'instances长度:', instances?.length);
+  console.log('原始instances数据:', instances);
+  
 
   const tableData = (instances || []).map(instance => ({
     key: String(instance.id),
@@ -28,6 +33,7 @@ const InstanceManagement = () => {
     username: instance.username,
     password: instance.password,
   }));
+  console.log('转换后的tableData:', tableData);
 
   const handleRefresh = async () => {
     setLoading(true);
@@ -141,19 +147,21 @@ const InstanceManagement = () => {
     }
   };
 
+  //弹窗取消按钮
   const handleModalCancel = () => {
     setIsModalVisible(false);
     form.resetFields();
     setEditingInstance(null);
   };
 
+  
   const columns = [
     {
       title: '实例名称',
       dataIndex: 'name',
       key: 'name',
       width: 200,
-      ellipsis: true,
+      ellipsis: true,   //过长显示省略号
       render: (text, record) => (
         <Space>
           <DatabaseOutlined style={{ color: '#1890ff' }} />
@@ -169,7 +177,7 @@ const InstanceManagement = () => {
       dataIndex: 'type',
       key: 'type',
       width: 120,
-      render: (type) => type?.toUpperCase() || 'UNKNOWN',
+      render: (type) => type?.toUpperCase() || 'UNKNOWN', 
     },
     {
       title: '状态',
@@ -183,6 +191,7 @@ const InstanceManagement = () => {
       dataIndex: 'addTime',
       key: 'addTime',
       width: 180,
+      //使用dayjs格式化时间
       render: (time) => time ? dayjs(time).format('YYYY-MM-DD HH:mm:ss') : '-',
     },
     {
@@ -213,6 +222,7 @@ const InstanceManagement = () => {
     },
   ];
 
+  //Ant Design Table 行选择
   const rowSelection = {
     selectedRowKeys,
     onChange: setSelectedRowKeys
@@ -240,7 +250,7 @@ const InstanceManagement = () => {
               添加实例
             </Button>
             {selectedRowKeys.length > 0 && (
-              <Button danger onClick={handleBatchDelete}>
+              <Button danger onClick={handleBatchDelete}> 
                 批量删除 ({selectedRowKeys.length})
               </Button>
             )}
@@ -255,7 +265,7 @@ const InstanceManagement = () => {
             >
               刷新状态
             </Button>
-            {/* 已移除搜索框与筛选按钮 */}
+            
           </Space>
         </div>
       </Card>
@@ -265,8 +275,8 @@ const InstanceManagement = () => {
         <Table
           rowSelection={rowSelection}
           columns={columns}
-          dataSource={tableData}
-          loading={loading || instancesLoading}
+          dataSource={tableData}    //绑定表格数据源
+          loading={loading || instancesLoading}   //数据刷新或初始化加载显示loding效果
           pagination={{
             current: 1,
             pageSize: 10,
@@ -278,8 +288,9 @@ const InstanceManagement = () => {
         />
       </Card>
 
+      {/* 实例详情弹窗 */}
       <Modal
-        title={editingInstance ? '编辑实例' : '添加实例'}
+        title={editingInstance ? '编辑实例' : '添加实例'}  
         open={isModalVisible}
         onOk={handleModalOk}
         onCancel={handleModalCancel}
@@ -287,7 +298,7 @@ const InstanceManagement = () => {
         width={600}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
+        
       >
         <Form
           form={form}

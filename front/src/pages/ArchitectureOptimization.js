@@ -1,12 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Select, Button, Space, Descriptions, Tag, Table, message, Divider, Tooltip, Alert } from 'antd';
 import { DatabaseOutlined, BulbOutlined } from '@ant-design/icons';
-import API_BASE_URL from '../config/api';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
-import { formatAnalysis } from '../utils/analysisFormatter';
+// import { formatAnalysis } from '../utils/analysisFormatter';
 import { renderAnalysis } from '../utils/commonUtils';
-import { useDebounceCallback } from '../hooks/useDebounce';
 
 // 轻量 Markdown 清洗：兜底清洗代码围栏/强调/列表符等
 const stripMarkdownLite = (s) => {
@@ -54,8 +52,8 @@ const ArchitectureOptimization = () => {
     }
   }, [selectedInstance, instanceOptions]);
 
-  // 防抖的分析函数，避免用户快速点击时重复请求
-  const debouncedAnalyze = useDebounceCallback(async () => {
+  // 分析函数
+  const handleAnalyze = async () => {
     if (!selectedInstance) {
       message.warning('请先选择数据库实例');
       return;
@@ -96,11 +94,6 @@ const ArchitectureOptimization = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, 500, [selectedInstance]);
-
-  const handleAnalyze = () => {
-    // 调用防抖的分析函数
-    debouncedAnalyze();
   };
   
   // 规范化 DeepSeek 返回：优先提取文本字段，其次安全字符串化
@@ -207,7 +200,12 @@ const ArchitectureOptimization = () => {
             filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
             options={instanceOptions}
           />
-          <Button type="primary" loading={isAnalyzing} onClick={handleAnalyze}>
+          <Button 
+            type="primary" 
+            loading={isAnalyzing} 
+            disabled={!selectedInstance || isAnalyzing}
+            onClick={handleAnalyze}
+          >
             {isAnalyzing ? '分析中...' : '开始架构检查'}
           </Button>
         </Space>

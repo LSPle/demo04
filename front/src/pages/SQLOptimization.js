@@ -7,9 +7,8 @@ import {
 } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
-import { formatAnalysis } from '../utils/analysisFormatter';
+// import { formatAnalysis } from '../utils/analysisFormatter';
 import { renderAnalysis } from '../utils/commonUtils';
-import { useDebounceCallback } from '../hooks/useDebounce';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -29,8 +28,8 @@ const SQLOptimization = () => {
   const [databaseOptions, setDatabaseOptions] = useState([]);
   const [loadingDatabases, setLoadingDatabases] = useState(false);
 
-  // 防抖的数据库获取函数，避免频繁切换实例时重复请求
-  const debouncedFetchDatabases = useDebounceCallback(async (instanceId) => {
+  // 数据库获取函数
+  const fetchDatabases = async (instanceId) => {
     setLoadingDatabases(true);
     try {
       const data = await apiClient.getInstanceDatabases(instanceId);
@@ -45,7 +44,7 @@ const SQLOptimization = () => {
     } finally {
       setLoadingDatabases(false);
     }
-  }, 300, []);
+  };
 
   // 当实例选择无效时重置
   useEffect(() => {
@@ -58,15 +57,15 @@ const SQLOptimization = () => {
   // 当选择实例时，获取该实例的数据库列表
   useEffect(() => {
     if (selectedInstance) {
-      debouncedFetchDatabases(selectedInstance);
+      fetchDatabases(selectedInstance);
     } else {
       setDatabaseOptions([]);
       setSelectedDatabase('');
     }
-  }, [selectedInstance]); // 移除debouncedFetchDatabases依赖，避免无限循环
+  }, [selectedInstance]);
 
-  // 防抖的SQL分析函数，避免用户快速点击时重复请求
-  const debouncedAnalyze = useDebounceCallback(async () => {
+  // SQL分析函数
+  const handleAnalyze = async () => {
     if (!selectedInstance) {
       message.warning('请选择实例');
       return;
@@ -101,33 +100,6 @@ const SQLOptimization = () => {
     } finally {
       setIsAnalyzing(false);
     }
-  }, 500, [selectedInstance, selectedDatabase, sqlQuery]);
-
-  const fetchDatabases = async (instanceId) => {
-    setLoadingDatabases(true);
-    try {
-      const data = await apiClient.getInstanceDatabases(instanceId);
-      const databases = data.databases || [];
-      setDatabaseOptions(databases.map(db => ({ value: db, label: db })));
-      
-      // 如果只有一个数据库，自动选择
-      if (databases.length === 1) {
-        setSelectedDatabase(databases[0]);
-      } else {
-        setSelectedDatabase('');
-      }
-    } catch (err) {
-      console.error('获取数据库列表失败:', err);
-      message.error('获取数据库列表失败，请检查实例连接状态');
-      setDatabaseOptions([]);
-    } finally {
-      setLoadingDatabases(false);
-    }
-  };
-
-  const handleAnalyze = () => {
-    // 调用防抖的分析函数
-    debouncedAnalyze();
   };
 
   const handleReset = () => {

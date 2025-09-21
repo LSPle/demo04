@@ -3,7 +3,6 @@ import { Card, Select, Button, Space, message, Row, Col, Skeleton, Alert } from 
 import { DatabaseOutlined, BulbOutlined, LineChartOutlined } from '@ant-design/icons';
 import apiClient from '../utils/apiClient';
 import { useInstances } from '../contexts/InstanceContext';
-import { useDebounceCallback } from '../hooks/useDebounce';
 import { renderAnalysis } from '../utils/commonUtils';
 
 // 轻量 Markdown 清洗（与其它页面风格一致）
@@ -42,6 +41,7 @@ const formatValue = (val, unit = '') => {
   return `${val}${unit}`;
 };
 
+//可能要删除
 const getSeverity = (key, rawVal) => {
   const v = Number(rawVal);
   if (rawVal === null || rawVal === undefined || rawVal === '' || Number.isNaN(v)) return 'default';
@@ -143,8 +143,8 @@ const ConfigOptimization = () => {
   const [advice, setAdvice] = useState('');
   const [adviceStatus, setAdviceStatus] = useState('idle'); // idle|loading|success|error
 
-  // 防抖的分析函数，避免用户快速点击时重复请求
-  const debouncedAnalyze = useDebounceCallback(async () => {
+  // 分析函数
+  const handleAnalyze = async () => {
     if (!selectedInstance) {
       message.warning('请先选择数据库实例');
       return;
@@ -170,7 +170,7 @@ const ConfigOptimization = () => {
     } finally {
       setLoading(false);
     }
-  }, 500, [selectedInstance]);
+  };
 
   // 当实例选择无效时重置
   useEffect(() => {
@@ -183,18 +183,15 @@ const ConfigOptimization = () => {
     }
   }, [selectedInstance, instanceOptions]);
 
-  const handleAnalyze = () => {
-    // 调用防抖的分析函数
-    debouncedAnalyze();
-  };
-
-  // 将后端 summary 映射到 12 项指标
+  // 将后端 summary 映射到指标
   const metricItems = useMemo(() => {
-    const s = metrics || {};
+    if (!metrics) return [];
+    
+    const s = metrics;
     const sys = s.system || {};
     const mysql = s.mysql || {};
     const perf = s.perf || {};
-    // 项目要求的 12 项：不足项以 N/A 展示
+    
     return [
       { key: 'cpu', label: METRIC_LABELS.cpu, value: sys.cpu_usage, unit: '%' },
       { key: 'mem', label: METRIC_LABELS.mem, value: sys.memory_usage, unit: '%' },
@@ -213,13 +210,10 @@ const ConfigOptimization = () => {
     ];
   }, [metrics]);
 
-  // 新增：高亮与常规指标分组，提升视觉层次
+  // 高亮与常规指标分组，提升视觉层次
   const highlightKeys = ['cpu', 'mem', 'qps', 'p95_latency_ms'];
-  const { highlightItems, restItems } = useMemo(() => {
-    const hi = metricItems.filter(it => highlightKeys.includes(it.key));
-    const rest = metricItems.filter(it => !highlightKeys.includes(it.key));
-    return { highlightItems: hi, restItems: rest };
-  }, [metricItems]);
+  const highlightItems = metricItems.filter(it => highlightKeys.includes(it.key));
+  const restItems = metricItems.filter(it => !highlightKeys.includes(it.key));
 
   return (
     <div style={{ padding: 24 }}>

@@ -4,7 +4,6 @@ import API_BASE_URL, { API_ENDPOINTS } from '../config/api';
 import apiClient from '../utils/apiClient';
 import dayjs from 'dayjs';
 import { useInstances } from '../contexts/InstanceContext';
-import { useDebounce, useDebounceCallback } from '../hooks/useDebounce';
 
 const { RangePicker } = DatePicker;
 
@@ -18,25 +17,6 @@ const SlowQueryLogs = () => {
   const [pageSize, setPageSize] = useState(10);
   const [filters, setFilters] = useState({ keyword: '', db: '', user_host: '', range: [] });
   const [sqlPreview, setSqlPreview] = useState({ visible: false, sql: '', analysis: null });
-
-  // 防抖优化：延迟500ms执行搜索，避免用户输入时频繁请求
-  const debouncedFilters = useDebounce(filters, 500);
-
-  // 防抖的搜索函数
-  const debouncedSearch = useDebounceCallback(() => {
-    if (instanceId) {
-      setPage(1);
-      fetchSlowLogs(instanceId, 1, pageSize, filters);
-    }
-  }, 300, [instanceId, filters, pageSize]);
-
-  // 当防抖后的过滤条件变化时自动搜索
-  useEffect(() => {
-    if (instanceId && (debouncedFilters.keyword || debouncedFilters.db || debouncedFilters.user_host || debouncedFilters.range.length > 0)) {
-      setPage(1);
-      fetchSlowLogs(instanceId, 1, pageSize, debouncedFilters);
-    }
-  }, [debouncedFilters, instanceId, pageSize]);
 
   // 当实例选择无效时重置
   useEffect(() => {

@@ -22,7 +22,7 @@ const SQLConsole = () => {
   const instanceOptions = getRunningInstanceOptions();
   const [selectedInstance, setSelectedInstance] = useState('');
   const [selectedDatabase, setSelectedDatabase] = useState('');
-  const [treeData, setTreeData] = useState([]); // [{title, key, children, isLeaf, type: 'db'|'table', database, tableName}]
+  const [treeData, setTreeData] = useState([]); 
   const [loadingDatabases, setLoadingDatabases] = useState(false);
   const [dbListError, setDbListError] = useState('');
   /* compact mode removed */

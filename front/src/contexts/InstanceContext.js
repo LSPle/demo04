@@ -3,13 +3,14 @@ import { message } from 'antd';
 import apiClient from '../utils/apiClient';
 import websocketService from '../services/websocketService';
 
-// 创建实例上下文
+// 创建实例上下文(数据仓库)
 const InstanceContext = createContext();
 
-// 实例状态管理Provider
+// 实例状态管理提供
 export const InstanceProvider = ({ children }) => {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(false);
+  // 记录实例列表最后更新时间
   const [lastUpdated, setLastUpdated] = useState(null);
 
   // 获取实例列表
