@@ -43,6 +43,9 @@ const SlowQueryLogs = () => {
       }
       const url = `${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`;
       const json = await apiClient.get(url);
+      
+      console.log('返回的json', json);
+      
       if (!json || json.error) {
         // 若后端返回 overview 但报错（比如 FILE 输出），给出提示
         if (json?.overview && String(json?.error || '').includes('TABLE')) {
