@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional, Tuple
+
 
 try:
     import pymysql
@@ -8,6 +8,7 @@ except ImportError:
 
 from ..models import Instance
 
+#创建日志(调试用)
 logger = logging.getLogger(__name__)
 
 

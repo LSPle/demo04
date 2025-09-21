@@ -1,4 +1,5 @@
 import os
+# 导入load_dotenv函数从.env中读取变量
 from dotenv import load_dotenv
 from app import create_app, socketio
 

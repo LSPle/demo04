@@ -16,16 +16,16 @@ socketio = SocketIO()
 def create_app():
     app = Flask(__name__)
 
-    # Load configuration
+    #加载配置
     app.config.from_object(Config)
 
-    # Initialize extensions with the app
+    #应用初始化拓展
     db.init_app(app)
     jwt.init_app(app)
     CORS(app, resources={r"/api/*": {"origins": "*"}})
     socketio.init_app(app, cors_allowed_origins="*", async_mode='threading')
 
-    # Register blueprints
+    #导入功能
     from .routes.auth import auth_bp
     from .routes.health import health_bp
     from .routes.instances import instances_bp
@@ -62,43 +62,18 @@ def create_app():
         full_path = os.path.join(build_dir, filename)
         if os.path.exists(full_path):
             return send_from_directory(build_dir, filename)
-        # For React Router client-side routes
+        #返回html让react自己处理
         return send_from_directory(build_dir, 'index.html')
 
-    # Create database tables if they don't exist
+    # 根据models.py的模型初始化数据库
     with app.app_context():
         db.create_all()
-        # Ensure persistent status column exists (idempotent)
-        try:
-            from sqlalchemy import text
-            # Try MySQL 8+ syntax first
-            db.session.execute(text(
-                "ALTER TABLE instances ADD COLUMN IF NOT EXISTS instanceStatus VARCHAR(32) NOT NULL DEFAULT 'running'"
-            ))
-            db.session.commit()
-        except Exception:
-            # Rollback and fallback to checking information_schema
-            db.session.rollback()
-            try:
-                from sqlalchemy import text
-                exists = db.session.execute(text(
-                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_NAME='instances' AND COLUMN_NAME='instanceStatus'"
-                )).scalar()
-                if not exists:
-                    db.session.execute(text(
-                        "ALTER TABLE instances ADD COLUMN instanceStatus VARCHAR(32) NOT NULL DEFAULT 'running'"
-                    ))
-                    db.session.commit()
-            except Exception:
-                db.session.rollback()
-                # If still failing, continue without raising to avoid blocking app startup
-                pass
     
-    # Initialize WebSocket service
+    # 初始化WebSocket服务
     from .services.websocket_service import websocket_service
     websocket_service.init_socketio(socketio, app)
     
-    # Register WebSocket events
+    # 注册WebSocket事件
     register_websocket_events()
     
     # 启动监控服务（恢复自动启动）
@@ -106,6 +81,7 @@ def create_app():
     
     return app
 
+    # 暂时保留
 def register_websocket_events():
     """注册WebSocket事件处理器"""
     from .services.websocket_service import websocket_service

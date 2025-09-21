@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Layout } from 'antd';
+import { Layout, App as AntdApp } from 'antd';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import InstanceOverview from './pages/InstanceOverview';
@@ -102,16 +102,22 @@ const App = () => {
 
   // 如果是登录页，直接返回登录组件
   if (currentPage === '/login') {
-    return renderPages();
+    return (
+      <AntdApp>
+        {renderPages()}
+      </AntdApp>
+    );
   }
 
   // 其他页面用AppLayout包装
   return (
-    <InstanceProvider>
-      <AppLayout>
-        {renderPages()}
-      </AppLayout>
-    </InstanceProvider>
+    <AntdApp>
+      <InstanceProvider>
+        <AppLayout>
+          {renderPages()}
+        </AppLayout>
+      </InstanceProvider>
+    </AntdApp>
   );
 };
 
