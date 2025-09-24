@@ -1,7 +1,7 @@
 from datetime import datetime
 from . import db
 
-
+'''核心业务模块都依赖的数据库模型'''
 class UserInfo(db.Model):
     __tablename__ = 'userinfo'
 

@@ -20,9 +20,9 @@ class WebSocketService:
         self._session_lock = Lock()
         self._active_sessions = 0
         # 动态检测频率配置
-        self.base_interval = 8  # 基础检测间隔（秒）- 增加到8秒减少检测频率
-        self.min_interval = 5   # 最小检测间隔（秒）
-        self.max_interval = 20  # 最大检测间隔（秒）
+        self.base_interval = 15  # 基础检测间隔（秒）- 增加到8秒减少检测频率
+        self.min_interval = 10   # 最小检测间隔（秒）
+        self.max_interval = 30  # 最大检测间隔（秒）
         
     def init_socketio(self, socketio: SocketIO, app=None):
         """初始化SocketIO实例"""

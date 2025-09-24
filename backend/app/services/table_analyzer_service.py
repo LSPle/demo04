@@ -2,9 +2,11 @@ import re
 import logging
 from typing import List, Dict, Optional, Tuple, Any
 import sqlparse
-from sqlparse.sql import IdentifierList, Identifier
+# from sqlparse.sql import IdentifierList, Identifier
 from sqlparse.tokens import Keyword, DML
-import json
+# import json
+
+"""表数据采样和分析服务：解析SQL中的表名，采样数据，生成执行计划"""
 
 try:
     import pymysql
@@ -18,22 +20,16 @@ logger = logging.getLogger(__name__)
 
 
 class TableAnalyzerService:
-    """表数据采样和分析服务：解析SQL中的表名，采样数据，生成执行计划"""
-
+    
+    #限制：最多分析的表数量
     def __init__(self):
         self.timeout = 15  # 秒
         self.max_sample_rows = 50  # 默认最大采样行数
         self.max_tables = 10  # 最多分析的表数量
-        self.blacklisted_tables = {
-            'mysql.user', 'mysql.db', 'information_schema.*', 
-            'performance_schema.*', 'sys.*'
-        }
 
-    def extract_table_names(self, sql: str) -> List[str]:
-        """
-        从SQL中提取表名
-        返回: 表名列表（去重）
-        """
+    #  从SQL中提取表名,返回: 表名列表（去重）
+    def extract_table_names(self, sql: str):
+      
         try:
             parsed = sqlparse.parse(sql)
             if not parsed:
@@ -82,26 +78,9 @@ class TableAnalyzerService:
             logger.warning(f"解析SQL表名失败: {e}")
             return []
 
-    def is_blacklisted_table(self, table_name: str) -> bool:
-        """检查是否为黑名单表"""
-        table_lower = table_name.lower()
-        for pattern in self.blacklisted_tables:
-            if '*' in pattern:
-                prefix = pattern.replace('*', '')
-                if table_lower.startswith(prefix):
-                    return True
-            elif table_lower == pattern:
-                return True
-        return False
-
+    #采样表数据和结构信息，返回: (成功标志, 样本数据字典, 错误信息)
     def sample_table_data(self, instance: Instance, database: str, table_name: str, 
                          sample_rows: int = None) -> Tuple[bool, Dict[str, Any], str]:
-        """
-        采样表数据和结构信息
-        返回: (成功标志, 样本数据字典, 错误信息)
-        """
-        if self.is_blacklisted_table(table_name):
-            return False, {}, f"表 {table_name} 在黑名单中，跳过采样"
         
         if not sample_rows:
             sample_rows = self.max_sample_rows
@@ -240,12 +219,9 @@ class TableAnalyzerService:
         except Exception as e:
             logger.error(f"采样表 {table_name} 失败: {e}")
             return False, {}, f"采样失败: {e}"
-
-    def get_explain_plan(self, instance: Instance, database: str, sql: str) -> Tuple[bool, Dict[str, Any], str]:
-        """
-        获取SQL的执行计划
-        返回: (成功标志, EXPLAIN结果, 错误信息)
-        """
+    
+    #获取SQL的执行计划，返回: (成功标志, EXPLAIN结果, 错误信息)
+    def get_explain_plan(self, instance: Instance, database: str, sql: str):   
         if not pymysql:
             return False, {}, "MySQL驱动不可用"
         
@@ -289,17 +265,15 @@ class TableAnalyzerService:
             logger.error(f"获取执行计划失败: {e}")
             return False, {}, f"执行计划获取失败: {e}"
 
-    def generate_strict_context(self, sql: str, instance: Instance, database: str, enable_explain: bool = True) -> str:
-        """
-        生成严格受限的上下文，仅包含：
-        - 数据库类型与版本
-        - （可选）执行计划 EXPLAIN（JSON 与传统）
-        - 涉及表的 DDL（SHOW CREATE TABLE）
-        - 现有索引（SHOW INDEX 摘要）
-        不包含：实例主机/端口、数据采样、数据大小、行样本等。
-        """
+    #生成严格受限的上下文，仅包含：数据库类型与版本,DDL（SHOW CREATE TABLE）,现有索引（SHOW INDEX 摘要）      
+    def generate_strict_context(self, sql: str, instance: Instance, database: str, enable_explain: bool = True):
+       
         parts: List[str] = []
-        db_type = (getattr(instance, 'db_type', '') or 'MySQL')
+        try:
+            temp_db_type = getattr(instance, 'db_type', None)
+            db_type = str(temp_db_type) if temp_db_type else 'MySQL'
+        except Exception:
+            db_type = 'MySQL'
         version_str = '未知'
 
         if not pymysql:
@@ -326,20 +300,23 @@ class TableAnalyzerService:
                 cursorclass=pymysql.cursors.DictCursor
             )
             with conn.cursor() as cursor:
+                version_str = "未知"
                 try:
+                    # 先用 SELECT VERSION()
                     cursor.execute("SELECT VERSION() AS ver")
                     row = cursor.fetchone()
                     if row and row.get('ver'):
                         version_str = str(row['ver'])
-                except Exception:
-                    try:
+                    else:
+                        # 再尝试 SHOW VARIABLES LIKE 'version'
                         cursor.execute("SHOW VARIABLES LIKE 'version'")
                         row = cursor.fetchone()
-                        if row and (row.get('Value') or row.get('value')):
-                            version_str = str(row.get('Value') or row.get('value'))
-                    except Exception:
-                        pass
+                        if row and row.get('Value'):
+                            version_str = str(row['Value'])
+                except Exception:
+                    pass
             parts.append(f"数据库: {db_type}; 版本: {version_str}")
+            
         except Exception as e:
             logger.warning(f"获取数据库版本失败: {e}")
             parts.append(f"数据库: {db_type}; 版本: 未知")
@@ -352,48 +329,37 @@ class TableAnalyzerService:
                     if plan.get('json_plan'):
                         parts.append("\n【EXPLAIN FORMAT=JSON】\n" + str(plan['json_plan']))
                     if plan.get('traditional_plan'):
-                        try:
-                            trad_json = json.dumps(plan['traditional_plan'], ensure_ascii=False)
-                        except Exception:
-                            trad_json = str(plan['traditional_plan'])
-                        parts.append("\n【EXPLAIN】\n" + trad_json)
+                        parts.append("\n【EXPLAIN】\n" + str(plan['traditional_plan']))
+                else:
+                    parts.append("\n【EXPLAIN】\n未获取到执行计划")
             except Exception as e:
                 logger.warning(f"获取EXPLAIN失败: {e}")
         
         # 提取表，并收集 DDL 与索引
         try:
-            tables = self.extract_table_names(sql) or []
+            # tables = self.extract_table_names(sql) or []
+            temp_tables = self .extract_table_names(sql)
+            if temp_tables:
+                tables = temp_tables
+            else:
+                tables = []
             if tables:
-                # 去重并限制数量
+                # 去重并限制5个数量
                 seen = []
                 for t in tables:
                     tn = t.split('.')[-1].strip('`"')
                     if tn and tn not in seen:
                         seen.append(tn)
                 tables = seen[:5]
+           
+            #验证是否连接失败
             if conn is None:
-                # 若此前连接失败，再尝试连接一次以便抓取DDL/索引
-                host, port = (getattr(instance, 'host', ''), getattr(instance, 'port', 3306))
-                try:
-                    port = int(port) if port is not None else 3306
-                except Exception:
-                    port = 3306
-                conn = pymysql.connect(
-                    host=host,
-                    port=port,
-                    user=instance.username or '',
-                    password=instance.password or '',
-                    database=database,
-                    charset='utf8mb4',
-                    connect_timeout=self.timeout,
-                    read_timeout=self.timeout,
-                    write_timeout=self.timeout,
-                    cursorclass=pymysql.cursors.DictCursor
-                )
+                logger.warning(f"连接数据库失败: {e}")
+                return "\n".join(parts)
             if tables and conn is not None:
                 with conn.cursor() as cursor:
                     for table in tables:
-                        # DDL
+                        # 获取DDL
                         try:
                             cursor.execute(f"SHOW CREATE TABLE `{table}`")
                             row = cursor.fetchone() or {}
@@ -403,7 +369,7 @@ class TableAnalyzerService:
                         except Exception as e:
                             logger.warning(f"获取DDL失败 {table}: {e}")
                         
-                        # INDEXES
+                        # 获取INDEXES信息
                         try:
                             cursor.execute(f"SHOW INDEX FROM `{table}`")
                             idx_rows = cursor.fetchall() or []
@@ -435,24 +401,24 @@ class TableAnalyzerService:
         except Exception as e:
             logger.warning(f"解析表与收集DDL/索引失败: {e}")
         finally:
-            try:
-                if conn:
-                    conn.close()
-            except Exception:
-                pass
+            # try:
+            #     if conn:
+            #         conn.close()
+            # except Exception:
+            #     pass
+            if conn:
+                conn.close()
         
         return "\n".join(parts)
-
+   
+    #生成包含表采样和执行计划的上下文摘要
     def generate_context_summary(self, sql: str, instance: Instance, database: str, 
                                 sample_rows: int = None, enable_sampling: bool = True, 
-                                enable_explain: bool = True) -> str:
-        """
-        生成包含表采样和执行计划的上下文摘要
-        """
+                                enable_explain: bool = True):
+       
         summary_parts = [
             f"实例: {instance.instance_name} ({instance.host}:{instance.port})",
-            f"数据库: {database}",
-            f"SQL类型: {self._detect_sql_type(sql)}"
+            f"数据库: {database}"
         ]
         
         # 提取表名
@@ -487,11 +453,8 @@ class TableAnalyzerService:
                         
                         # 列信息概览（前5列）
                         if sample_data['columns']:
-                            col_briefs = []
-                            for col in sample_data['columns'][:5]:
-                                key_flag = (col.get('key') or '').upper()
-                                key_part = f",{key_flag}" if key_flag else ""
-                                col_briefs.append(f"{col['name']}({col['type']}{key_part})")
+                            cols = sample_data['columns'][:5]
+                            col_briefs = [f"{c.get('name')}({c.get('type')})" for c in cols]
                             summary_parts.append(f"- 列信息(前5): {', '.join(col_briefs)}")
                         
                         # 索引摘要（最多3个详细展示）
@@ -545,7 +508,7 @@ class TableAnalyzerService:
                             summary_parts.append(f"- 字符集: {table_collation}")
                             summary_parts.append(f"- 创建时间: {create_time}, 更新时间: {update_time}")
                         
-                        # 列信息
+                        # 获取列信息
                         if table_metadata.get('columns'):
                             summary_parts.append(f"- 列数: {len(table_metadata['columns'])}")
                             # 主键
@@ -555,14 +518,11 @@ class TableAnalyzerService:
                             # 列详情（所有列）
                             col_details = []
                             for col in table_metadata['columns']:
+                                name = col.get('name')
+                                typ = col.get('type')
                                 key_flag = (col.get('key') or '').upper()
-                                null_flag = "NULL" if col.get('null') == 'YES' else "NOT NULL"
-                                default_val = f", 默认={col.get('default')}" if col.get('default') else ""
-                                extra = f", {col.get('extra')}" if col.get('extra') else ""
-                                col_detail = f"{col['name']}({col['type']}, {null_flag}{default_val}{extra})"
-                                if key_flag:
-                                    col_detail += f" [{key_flag}]"
-                                col_details.append(col_detail)
+                                suffix = f" [{key_flag}]" if key_flag else ""
+                                col_details.append(f"{name}({typ}){suffix}")
                             summary_parts.append(f"- 列详情: {'; '.join(col_details)}")
                         
                         # 索引详情
@@ -596,9 +556,10 @@ class TableAnalyzerService:
                         
                     else:
                         summary_parts.append(f"\n【表 {table_name}】元信息获取失败: {error}")
-        
+
+        # 获取执行计划
         if enable_explain:
-            # 获取执行计划
+            
             success, explain_data, error = self.get_explain_plan(instance, database, sql)
             if success and explain_data.get('traditional_plan'):
                 summary_parts.append(f"\n【执行计划摘要】")
@@ -624,15 +585,8 @@ class TableAnalyzerService:
                 summary_parts.append(f"\n【执行计划】获取失败: {error}")
         
         return "\n".join(summary_parts)
-
-    def _get_table_metadata_only(self, instance: Instance, database: str, table_name: str) -> Tuple[bool, Dict[str, Any], str]:
-        """
-        仅获取表的元信息，不进行数据采样
-        返回: (成功标志, 元信息字典, 错误信息)
-        """
-        if self.is_blacklisted_table(table_name):
-            return False, {}, f"表 {table_name} 在黑名单中，跳过分析"
-            
+    #仅获取表的元信息，不进行数据采样,返回: (成功标志, 元信息字典, 错误信息)
+    def _get_table_metadata_only(self, instance: Instance, database: str, table_name: str):
         if not pymysql:
             return False, {}, "MySQL驱动不可用"
         
@@ -773,44 +727,17 @@ class TableAnalyzerService:
         except Exception as e:
             logger.error(f"获取表 {table_name} 元信息失败: {e}")
             return False, {}, f"元信息获取失败: {e}"
-
-    def _format_bytes(self, byte_size):
-        """格式化字节大小为可读格式"""
-        if byte_size is None:
+    #格式化字节大小为可读格式
+    def _format_bytes(self, size_bytes):
+        """格式化字节大小为可读字符串"""
+        if size_bytes is None or not isinstance(size_bytes, (int, float)):
             return "未知"
-        try:
-            byte_size = int(byte_size)
-            if byte_size == 0:
-                return "0 B"
-            
-            units = ['B', 'KB', 'MB', 'GB', 'TB']
-            unit_index = 0
-            size = float(byte_size)
-            
-            while size >= 1024 and unit_index < len(units) - 1:
-                size /= 1024
-                unit_index += 1
-            
-            if unit_index == 0:
-                return f"{int(size)} {units[unit_index]}"
-            else:
-                return f"{size:.2f} {units[unit_index]}"
-        except (ValueError, TypeError):
-            return "未知"
-
-    def _detect_sql_type(self, sql: str) -> str:
-        """检测SQL类型"""
-        sql_upper = sql.upper().strip()
-        if sql_upper.startswith('SELECT'):
-            return 'SELECT'
-        elif sql_upper.startswith('INSERT'):
-            return 'INSERT'
-        elif sql_upper.startswith('UPDATE'):
-            return 'UPDATE'
-        elif sql_upper.startswith('DELETE'):
-            return 'DELETE'
-        else:
-            return 'OTHER'
+        
+        for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+            if size_bytes < 1024.0:
+                return f"{size_bytes:.2f} {unit}"
+            size_bytes /= 1024.0
+        return f"{size_bytes:.2f} PB"
 
 
 # 全局实例

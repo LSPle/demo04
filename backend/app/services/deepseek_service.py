@@ -6,10 +6,11 @@ import html
 import logging
 import os
 
-
+'''
+    DeepSeek：提供SQL分析
+'''
+#DeepSeek API 适配器：提供SQL分析和重写功能
 class DeepSeekClient:
-    """DeepSeek API 适配器：提供SQL分析和重写功能"""
-
     def __init__(self):
         self.base_url = None
         self.api_key = None
@@ -25,11 +26,8 @@ class DeepSeekClient:
         self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
         self.timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
         self.enabled = os.getenv("LLM_ENABLED", "true").lower() != "false"
-
-    def _build_prompt(self, sql: str, meta_summary: str) -> str:
-        """构造系统提示。仅支持 MySQL，直接返回分析内容。
-        meta_summary: 后端提炼的表/索引/执行计划摘要（可为空字符串）。
-        """
+        #构造系统提示。仅支持 MySQL，直接返回分析内容
+    def _build_prompt(self, sql: str, meta_summary: str):
         return (
             "你是资深MySQL查询优化专家。根据给定SQL与元数据/执行计划摘要，提供优化分析。\n"
             "重要原则：\n"
@@ -41,20 +39,18 @@ class DeepSeekClient:
             f"\n【SQL】:\n{sql}\n"
             f"\n【摘要】:\n{meta_summary}\n"
         )
-
-    def _build_analyze_prompt(self, sql: str, context_summary: str = "") -> str:
-        """
-        构建SQL分析的提示词
-        """
+    #构建SQL分析的提示词
+    def _build_analyze_prompt(self, sql: str, context_summary: str = ""):
         context_part = f"\n\n上下文：{context_summary}" if context_summary else ""
         
         return f"""SQL: {sql}{context_part}
 
 性能分析（200字内）："""
+    
+    
 
-
+    #统一的API调用方法
     def _make_api_call(self, messages, max_tokens=1200, max_retries=2):
-        """统一的API调用方法"""
         url = f"{self.base_url}/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -90,9 +86,8 @@ class DeepSeekClient:
                     raise
         
         return None
-
+    #返回分析内容；若出错，返回 None
     def rewrite_sql(self, sql: str, meta_summary: str = "") -> Optional[str]:
-        """返回分析内容；若出错，返回 None。"""
         if not self.enabled or not self.api_key:
             return None
 
@@ -113,11 +108,8 @@ class DeepSeekClient:
         except Exception as e:
             logging.error(f"DeepSeek rewrite_sql error: {str(e)}")
             return None
-
+    #分析SQL语句
     def analyze_sql(self, sql: str, context_summary: str = "") -> Optional[dict]:
-        """
-        分析SQL语句
-        """
         try:
             if not self.enabled:
                 return None

@@ -1,3 +1,6 @@
+'''
+   当Prometheus不可用时，提供基于psutil的本地系统指标采集能力的备份(用不上)
+'''
 from flask import Blueprint, jsonify
 from ..services.system_metrics_service import system_metrics_service
 from ..services.prometheus_service import prometheus_service

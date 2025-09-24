@@ -31,18 +31,18 @@ const SlowQueryLogs = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-      params.set('page', String(p));
-      params.set('page_size', String(ps));
-      if (f.keyword) params.set('keyword', f.keyword);
-      if (f.db) params.set('db', f.db);
-      if (f.user_host) params.set('user_host', f.user_host);
+      const params = {
+        page: String(p),
+        page_size: String(ps)
+      };
+      if (f.keyword) params.keyword = f.keyword;
+      if (f.db) params.db = f.db;
+      if (f.user_host) params.user_host = f.user_host;
       if (Array.isArray(f.range) && f.range.length === 2) {
-        params.set('start_time', f.range[0].toISOString());
-        params.set('end_time', f.range[1].toISOString());
+        params.start_time = f.range[0].toISOString();
+        params.end_time = f.range[1].toISOString();
       }
-      const url = `${API_ENDPOINTS.SLOWLOG_LIST(id)}?${params.toString()}`;
-      const json = await apiClient.get(url);
+      const json = await apiClient.getSlowlogs(id, params);
       
       console.log('返回的json', json);
       

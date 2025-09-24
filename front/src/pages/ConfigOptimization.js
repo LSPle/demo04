@@ -153,6 +153,7 @@ const ConfigOptimization = () => {
     setAdviceStatus('loading');
     try {
       // 一次调用后端建议接口，返回 metrics + advice
+      
       const data = await apiClient.getMetricsAdvice(selectedInstance);
       const summary = data.metrics || null;
       setMetrics(summary);

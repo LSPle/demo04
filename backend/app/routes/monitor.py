@@ -2,6 +2,10 @@ from flask import Blueprint, jsonify, request
 from ..services.instance_monitor_service import instance_monitor_service
 import logging
 
+'''
+    实例监控(刷新按钮)
+'''
+
 logger = logging.getLogger(__name__)
 
 monitor_bp = Blueprint('monitor', __name__)
@@ -38,7 +42,7 @@ def get_instances_summary():
     获取实例状态汇总信息
     """
     try:
-        summary = instance_monitor_service.get_instance_status_summary()
+        summary = instance_monitor_service.get_instance_status_summary() #调用services/instance_monitor_service获取实例
         return jsonify(summary), 200
         
     except Exception as e:

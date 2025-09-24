@@ -2,14 +2,13 @@ import logging
 from typing import List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
-
-try:
-    import pymysql
-except ImportError:
-    pymysql = None
-
+import pymysql  #实现mysql连接、执行sql查询、关闭连接
 from ..models import Instance
 from .. import db
+'''
+    实例监控服务(核心)：检测单个实例，检测所有实例，更新实例状态，获取状态汇总
+'''
+
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +17,14 @@ class InstanceMonitorService:
     """简化版实例监控服务"""
 
     def __init__(self):
-        self.timeout = 10  # 超时时间10秒
-        self.max_workers = 10  # 并发检测线程数
-        self.retry_count = 2  # 重试2次
+        self.timeout = 15 # 超时时间10秒
+        self.max_workers = 15  # 并发检测线程数
+        self.retry_count = 3  # 重试2次
         self.failure_counts = {}  # 失败计数器
-        self.failure_threshold = 2  # 连续失败2次才标记异常
+        self.failure_threshold = 3  # 连续失败3次才标记异常
+        self.success_threshold = 2  # 新增：成功阈值2次
 
-    def check_instance_connection(self, instance: Instance) -> Tuple[bool, str]:
+    def check_instance_connection(self, instance):
         """检查实例连接状态"""
         if not instance:
             return False, "实例不存在"
@@ -52,12 +52,15 @@ class InstanceMonitorService:
                     autocommit=True
                 )
                 
-                # 测试查询
+                #测试查询
                 with conn.cursor() as cursor:
                     cursor.execute("SELECT 1")
                     cursor.fetchone()
                 
                 conn.close()
+                
+              
+
                 
                 # 连接成功，重置失败计数
                 if instance.id in self.failure_counts:
@@ -71,7 +74,8 @@ class InstanceMonitorService:
         
         return False, "连接失败"
 
-    def update_instance_status(self, instance: Instance, is_connected: bool, message: str = "") -> bool:
+    #不太明白
+    def update_instance_status(self, instance: Instance, is_connected: bool, message: str = ""):
         """更新实例状态 - 状态平滑机制"""
         try:
             if is_connected:
@@ -103,7 +107,7 @@ class InstanceMonitorService:
             db.session.rollback()
             return False
 
-    def check_all_instances(self) -> Tuple[int, int, int]:
+    def check_all_instances(self):
         """并发检测所有实例"""
         try:
             instances = Instance.query.all()
@@ -144,7 +148,7 @@ class InstanceMonitorService:
             logger.error(f"批量检测实例状态失败: {e}")
             return 0, 0, 0
 
-    def get_instance_status_summary(self) -> dict:
+    def get_instance_status_summary(self):
         """获取实例状态汇总"""
         try:
             instances = Instance.query.all()

@@ -1,3 +1,4 @@
+from math import log
 from flask import Blueprint, Response, current_app, request, stream_with_context, jsonify
 import json
 import time
@@ -7,11 +8,15 @@ from ..models import Instance
 from ..services.metrics_summary_service import metrics_summary_service
 from ..services.deepseek_service import DeepSeekClient, strip_markdown
 
+#实时指标流
+
 logger = logging.getLogger(__name__)
 
 metrics_bp = Blueprint('metrics', __name__)
 
-
+'''
+    获取指标(配置优化)，DeepSeek分析
+'''
 def sse_format(event: str = None, data: dict = None, id: str = None) -> str:
     """Format message for SSE"""
     parts = []
@@ -144,8 +149,9 @@ def metrics_advise(instance_id: int):
 
         # 获取指标摘要
         summary = metrics_summary_service.get_summary(inst)
+        # logger.info(f"获取到的指标摘要: {summary}")
 
-        # 预设提示词模板（面向配置优化）
+        # 预设提示词模板（配置优化页面）
         system_prompt = (
             "你是资深数据库性能和配置优化专家。基于给定的运行指标，提供简洁、可执行的配置层面优化建议。"
             "注意：不要输出多余的Markdown格式（如标题、代码块、粗体等）。直接给出中文要点列表。"

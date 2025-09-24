@@ -1,3 +1,4 @@
+
 import pymysql
 import time
 import logging
@@ -6,20 +7,18 @@ from ..models import Instance
 
 logger = logging.getLogger(__name__)
 
-
+#直接通过SQL查询获取MySQL性能指标，无需依赖Prometheus
 class DirectMySQLMetricsService:
-    """直接通过SQL查询获取MySQL性能指标，无需依赖Prometheus"""
-    
+   
+    #存储状态
     def __init__(self):
         self._last_status = {}
         self._last_timestamp = 0
-    
-    def _connect_to_mysql(self, inst: Instance) -> Optional[pymysql.Connection]:
-        """建立MySQL连接"""
+    #建立MySQL连接"
+    def _connect_to_mysql(self, inst: Instance):
+       
         try:
-            # 添加调试日志
-            logger.info(f"尝试连接MySQL: host={inst.host}, port={inst.port}, user={inst.username}, password={'***' if inst.password else 'None'}")
-            
+                       
             conn = pymysql.connect(
                 host=inst.host,
                 port=inst.port,
@@ -34,28 +33,26 @@ class DirectMySQLMetricsService:
         except Exception as e:
             logger.error(f"MySQL连接失败: {e}")
             return None
-    
-    def _execute_query(self, conn: pymysql.Connection, query: str) -> Optional[Dict[str, Any]]:
-        """执行SQL查询并返回结果"""
+    #执行SQL查询并返回结果
+    def _execute_query(self, conn: pymysql.Connection, query: str):       
         try:
-            with conn.cursor() as cursor:
-                cursor.execute(query)
-                columns = [desc[0] for desc in cursor.description]
-                rows = cursor.fetchall()
-                return {'columns': columns, 'rows': rows}
+            cursor = conn.cursor()
+            cursor.execute(query)
+            columns = [desc[0] for desc in cursor.description]
+            rows = cursor.fetchall()
+            cursor.close()
+            return {'columns': columns, 'rows': rows}
         except Exception as e:
             logger.error(f"查询执行失败: {query}, 错误: {e}")
             return None
-    
-    def get_qps_tps_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """获取QPS和TPS指标"""
+    #取QPS和TPS指标
+    def get_qps_tps_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
-        
+        #计算出QPS和TPS
         try:
-            current_time = time.time()
-            
+            current_time = time.time()          
             # 获取当前状态变量
             status_query = """
             SHOW GLOBAL STATUS WHERE Variable_name IN (
@@ -71,14 +68,19 @@ class DirectMySQLMetricsService:
             # 解析状态变量
             current_status = {}
             for row in result['rows']:
-                var_name, var_value = row
-                current_status[var_name] = int(var_value) if var_value.isdigit() else 0
+                var_name = row[0]
+                var_value = row[1]
+                if var_value.isdigit():
+                    current_status[var_name] = int(var_value)
+                else:
+                    current_status[var_name] = 0
             
             # 计算QPS和TPS（需要两次采样的差值）
             qps = None
             tps = None
             
             if self._last_status and self._last_timestamp > 0:
+                #时间差值
                 time_diff = current_time - self._last_timestamp
                 if time_diff > 0:
                     # QPS = (当前Queries - 上次Queries) / 时间差
@@ -107,25 +109,27 @@ class DirectMySQLMetricsService:
             return {'qps': None, 'tps': None, 'error': str(e)}
         finally:
             conn.close()
-    
-    def get_performance_schema_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """从performance_schema获取性能指标"""
+    #从performance_schema获取性能指标
+    def get_performance_schema_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
-            return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': 'MySQL连接失败'}
-        
+            return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': 'MySQL连接失败'}        
         try:
             # 检查performance_schema是否启用
             check_ps_query = "SELECT @@performance_schema"
             result = self._execute_query(conn, check_ps_query)
-            if not result or not result['rows'] or result['rows'][0][0] != 1:
+            
+            # 简化判断：如果查询失败或结果不是1，说明未启用
+            if not result or result['rows'][0][0] != 1:
+                logger.info(f"{result['rows']}")
                 return {
                     'p95_latency_ms': None,
                     'avg_response_time_ms': None,
                     'error': 'performance_schema未启用'
                 }
-            
-            # 获取语句统计信息
+                     
+            # 性能统计信息
+            #获取最近 5 分钟内最慢的 100 条SQL 模板及其平均延迟和执行次数
             perf_query = """
             SELECT 
                 ROUND(AVG(avg_timer_wait) / 1000000, 2) as avg_response_time_ms,
@@ -139,9 +143,9 @@ class DirectMySQLMetricsService:
             result = self._execute_query(conn, perf_query)
             if not result or not result['rows']:
                 return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': '性能数据不足'}
-            
-            row = result['rows'][0]
-            avg_response_time_ms = row[0] if row[0] else None
+            '''查看数据'''
+            logger.info(f"Performance 查询返回{result['rows']}")
+            avg_response_time_ms = result['rows'][0][0]
             
             # 尝试获取P95延迟（使用MySQL兼容的方法）
             # 由于MySQL不支持PERCENTILE_CONT，使用近似计算方法
@@ -157,6 +161,8 @@ class DirectMySQLMetricsService:
             """
             
             p95_result = self._execute_query(conn, p95_query)
+            '''查看数据'''
+            logger.info(f"Performance P95 查询返回{p95_result}")
             p95_latency_ms = None
             if p95_result and p95_result['rows']:
                 # 简单取前5%的平均值作为P95近似值
@@ -165,11 +171,15 @@ class DirectMySQLMetricsService:
                     p95_index = max(1, int(len(rows) * 0.05))  # 取前5%
                     p95_latency_ms = sum(row[0] for row in rows[:p95_index]) / p95_index
             
+            # 获取第一个查询的完整结果
+            first_row = result['rows'][0]
+            '''查看数据'''
+            logger.info(f"Performance 第一个查询返回{first_row}")
             return {
                 'p95_latency_ms': p95_latency_ms,
-                'avg_response_time_ms': avg_response_time_ms,
-                'statement_count': row[1] if len(row) > 1 else None,
-                'total_executions': row[2] if len(row) > 2 else None
+                'avg_response_time_ms': first_row[0],
+                'statement_count': first_row[1],
+                'total_executions': first_row[2]
             }
             
         except Exception as e:
@@ -177,22 +187,23 @@ class DirectMySQLMetricsService:
             return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': str(e)}
         finally:
             conn.close()
-    
-    def get_slow_query_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """获取慢查询相关指标"""
+    #获取慢查询相关指标
+    def get_slow_query_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
-            return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': 'MySQL连接失败'}
-        
-        try:
-            # 获取慢查询统计
+            return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': 'MySQL连接失败'}    
+        # 获取慢查询统计  
+        try:            
             slow_query_query = """
             SHOW GLOBAL STATUS WHERE Variable_name IN (
                 'Slow_queries', 'Queries'
             )
-            """
-            
+            """            
             result = self._execute_query(conn, slow_query_query)
+
+            '''查看数据'''
+            logger.info(f"慢查询查询返回{result}")
+
             if not result:
                 return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': '慢查询统计获取失败'}
             
@@ -220,31 +231,32 @@ class DirectMySQLMetricsService:
             return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': str(e)}
         finally:
             conn.close()
-    
-    def get_index_usage_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """获取索引使用率指标"""
+    #获取索引使用率指标
+    def get_index_usage_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'index_usage_rate': None, 'error': 'MySQL连接失败'}
-        
-        try:
-            # 获取索引使用相关的状态变量
+         # 获取索引使用相关的状态变量
+        try:         
             index_query = """
             SHOW GLOBAL STATUS WHERE Variable_name IN (
                 'Handler_read_key', 'Handler_read_next', 'Handler_read_prev',
                 'Handler_read_first', 'Handler_read_last', 'Handler_read_rnd',
                 'Handler_read_rnd_next'
             )
-            """
-            
+            """        
             result = self._execute_query(conn, index_query)
             if not result:
                 return {'index_usage_rate': None, 'error': '索引统计获取失败'}
             
             status_vars = {}
-            for row in result['rows']:
-                var_name, var_value = row
-                status_vars[var_name] = int(var_value) if var_value.isdigit() else 0
+            for row in result['row']:
+                var_name = row[0]
+                var_value = row[1]
+                if var_value.isdigit():
+                    status_vars[var_name] = int(var_value)
+                else:
+                    status_vars[var_name] = 0            
             
             # 计算索引使用率
             # 索引读取 = Handler_read_key + Handler_read_next + Handler_read_prev + Handler_read_first + Handler_read_last
@@ -280,9 +292,8 @@ class DirectMySQLMetricsService:
             return {'index_usage_rate': None, 'error': str(e)}
         finally:
             conn.close()
-    
-    def get_basic_status_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """获取MySQL基础状态指标"""
+    #获取MySQL基础状态指标
+    def get_basic_status_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'threads_connected': None, 'threads_running': None, 'error': 'MySQL连接失败'}
@@ -305,7 +316,10 @@ class DirectMySQLMetricsService:
             status_vars = {}
             for row in result['rows']:
                 var_name, var_value = row
-                status_vars[var_name] = int(var_value) if var_value.isdigit() else 0
+                if var_value.isdigit():
+                    status_vars[var_name] = int(var_value)
+                else:
+                    status_vars[var_name] = 0
             
             # 计算缓存命中率
             cache_hit_rate = None
@@ -365,9 +379,8 @@ class DirectMySQLMetricsService:
             return {'threads_connected': None, 'threads_running': None, 'error': str(e)}
         finally:
             conn.close()
-    
-    def get_all_direct_metrics(self, inst: Instance) -> Dict[str, Any]:
-        """获取所有直接查询的MySQL指标"""
+    '''获取所有直接查询的MySQL指标'''
+    def get_all_direct_metrics(self, inst: Instance):
         metrics = {
             'generated_at': int(time.time()),
             'source': 'direct_mysql_query'

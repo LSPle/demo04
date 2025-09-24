@@ -3,7 +3,9 @@ import json
 from typing import Any, Dict, List, Optional, Tuple
 import requests
 import re
-
+'''
+    架构优化页面
+'''
 try:
     import pymysql
 except ImportError:
@@ -29,6 +31,7 @@ class ArchCollector:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
 
+    #无法使用DeepSeek的情况下
     def _connect(self, inst: Instance):
         if not pymysql:
             raise RuntimeError("MySQL驱动不可用")

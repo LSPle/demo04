@@ -1,6 +1,9 @@
 import logging
+from typing import Tuple, List
 
-
+'''
+    获取数据库列表(仅支持MySQL)
+'''
 try:
     import pymysql
 except ImportError:

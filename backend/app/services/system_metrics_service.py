@@ -7,13 +7,8 @@ logger = logging.getLogger(__name__)
 
 
 class SystemMetricsService:
-    """轻量级系统指标采集服务，使用psutil替代Prometheus
-    
-    优势：
-    - 无需外部依赖（Prometheus服务器）
-    - 部署简单，开箱即用
-    - 资源占用低
-    - 跨平台兼容
+    """轻量级系统指标采集服务，使用psutil替代Prometheus(保留)
+       获取CPU使用率、内存使用率、磁盘使用率、磁盘I/O、网络I/O
     """
     
     def __init__(self):

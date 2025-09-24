@@ -27,7 +27,6 @@ def create_app():
 
     #导入功能
     from .routes.auth import auth_bp
-    from .routes.health import health_bp
     from .routes.instances import instances_bp
     from .routes.metrics import metrics_bp
     from .routes.sql_analyze import sql_analyze_bp
@@ -37,7 +36,6 @@ def create_app():
     from .routes.monitor import monitor_bp
     from .routes.system_metrics import system_metrics_bp
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(health_bp, url_prefix='/api')
     app.register_blueprint(instances_bp, url_prefix='/api')
     app.register_blueprint(metrics_bp, url_prefix='/api')
     app.register_blueprint(sql_analyze_bp, url_prefix='/api')

@@ -4,6 +4,11 @@ from ..services.architecture_optimization_service import arch_collector, arch_ad
 from ..services.slowlog_service import slowlog_service
 from ..services.metrics_summary_service import metrics_summary_service
 
+'''
+    架构优化(收集参数)
+'''
+
+#创建蓝图
 arch_opt_bp = Blueprint('arch_opt', __name__)
 
 @arch_opt_bp.post('/instances/<int:instance_id>/arch/analyze')

@@ -4,9 +4,16 @@ from ..services.deepseek_service import get_deepseek_client
 from ..services.table_analyzer_service import table_analyzer_service
 import pymysql
 import logging
+import re
+import sqlparse as _sp
+
+'''
+    SQL审核优化,DeepSeek分析
+'''
 
 logger = logging.getLogger(__name__)
 
+#创建蓝图
 sql_analyze_bp = Blueprint('sql_analyze', __name__)
 
 @sql_analyze_bp.post('/sql/analyze')
@@ -18,25 +25,31 @@ def analyze_sql():
             return jsonify({"error": "请求体不能为空"}), 400
             
         # 验证instanceId
-        try:
-            instance_id = int(data.get('instanceId') or 0)
-            if instance_id <= 0:
-                return jsonify({"error": "实例ID必须是正整数"}), 400
-        except (ValueError, TypeError):
-            return jsonify({"error": "实例ID必须是有效的整数"}), 400
+        instance_id = data.get('instanceId')
+        if not instance_id or instance_id <= 0:
+            return jsonify({"error": "请提供有效的实例ID"}), 400
             
         # 验证SQL
         sql = (data.get('sql') or '').strip()
         if not sql:
             return jsonify({"error": "SQL语句不能为空"}), 400
-        if len(sql) > 10000:  # 限制SQL长度
-            return jsonify({"error": "SQL语句长度不能超过10000个字符"}), 400
-        # 仅支持单条语句，避免 EXPLAIN 对多语句报错（优先使用 sqlparse.split）
-        try:
-            import sqlparse as _sp
-            statements = [s.strip() for s in _sp.split(sql) if s.strip()]
+
+        #使用sqlparse库智能解析SQL语句(可能不需要)
+        try:   
+            split_result = _sp.split(sql)
+            statements = []
+            for s in split_result:
+                cleaned_s = s.strip()
+                if cleaned_s:
+                    statements.append(cleaned_s)
+        #获取所有错误
         except Exception:
-            statements = [s.strip() for s in sql.split(';') if s.strip()]
+            split_result = sql.spilt(';')
+            statements = []
+            for s in split_result:
+                cleaned_s = s.strip()
+                if cleaned_s:
+                    statements.append(cleaned_s)
         if len(statements) != 1:
             return jsonify({"error": "仅支持单条 SQL 语句分析，请去除多余的分号或多语句"}), 400
         sql = statements[0]
@@ -45,10 +58,8 @@ def analyze_sql():
         database = (data.get('database') or '').strip()
         if not database:
             return jsonify({"error": "数据库名称不能为空"}), 400
-        if len(database) > 64:  # MySQL数据库名称长度限制
-            return jsonify({"error": "数据库名称长度不能超过64个字符"}), 400
         # 简单的数据库名称格式验证（防止SQL注入）
-        import re
+        
         if not re.match(r'^[a-zA-Z0-9_]+$', database):
             return jsonify({"error": "数据库名称只能包含字母、数字和下划线"}), 400
             
@@ -78,6 +89,7 @@ def analyze_sql():
             logger.warning(f"严格上下文生成失败 (实例ID: {instance_id}): {e}")
             context_summary = ""
 
+        #调用deepseek分析
         client = get_deepseek_client()
         logger.info(f"DeepSeek客户端配置: enabled={client.enabled}, api_key_set={bool(client.api_key)}, base_url={client.base_url}")
         
@@ -113,6 +125,7 @@ def analyze_sql():
         return jsonify({"error": f"服务器错误: {e}"}), 500
 
 
+#SQL窗口页面
 @sql_analyze_bp.post('/sql/execute')
 def execute_sql():
     """执行 SQL（仅 MySQL）。支持查询类与非查询类，返回结果或受影响行数。"""

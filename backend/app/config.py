@@ -4,6 +4,7 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
+'''集中管理并加载后端应用'''
 
 class Config:
     # 简化：直接从.env读取，不提供默认值
