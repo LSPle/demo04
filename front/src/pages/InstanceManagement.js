@@ -16,7 +16,7 @@ const InstanceManagement = () => {
   const [form] = Form.useForm();
   const [editingInstance, setEditingInstance] = useState(null);
   
-  const { instances, loading: instancesLoading, silentRefreshInstances } = useInstances();
+  const { instances, loading: instancesLoading, refreshInstances, silentRefreshInstances } = useInstances();
   // 在组件开始处添加
   console.log('组件渲染 - instancesLoading:', instancesLoading, 'instances长度:', instances?.length);
   console.log('原始instances数据:', instances);
@@ -36,14 +36,12 @@ const InstanceManagement = () => {
   console.log('转换后的tableData:', tableData);
 
   const handleRefresh = async () => {
-    setLoading(true);
     try {
-      await silentRefreshInstances();
-      message.success('实例状态已刷新');
+      // 使用带消息提示的刷新函数，而不是静默刷新
+      await refreshInstances();
     } catch (error) {
+      console.error('刷新实例列表失败:', error);
       message.error('刷新失败，请稍后重试');
-    } finally {
-      setLoading(false);
     }
   };
 

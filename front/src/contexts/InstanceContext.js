@@ -21,7 +21,10 @@ export const InstanceProvider = ({ children }) => {
       const instanceList = Array.isArray(data) ? data : (Array.isArray(data.instances) ? data.instances : []);
       setInstances(instanceList);
       setLastUpdated(new Date());
-      // 提示已移除：不再弹出“实例列表已更新”成功消息
+      // 只在手动刷新时显示成功消息
+      if (showMessage) {
+        message.success('刷新成功');
+      }
     } catch (error) {
       console.error('获取实例列表失败:', error);
       if (showMessage) {

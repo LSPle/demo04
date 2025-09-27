@@ -17,9 +17,10 @@ class InstanceMonitorService:
     """简化版实例监控服务"""
 
     def __init__(self):
-        self.timeout = 15 # 超时时间10秒
-        self.max_workers = 15  # 并发检测线程数
-        self.retry_count = 3  # 重试2次
+        self.max_workers = 5
+        self.retry_count = 2  # 减少重试次数
+        self.timeout = 30  # 增加超时时间到30秒
+        self.failure_threshold = 5  # 增加失败阈值到5次
         self.failure_counts = {}  # 失败计数器
         self.failure_threshold = 3  # 连续失败3次才标记异常
         self.success_threshold = 2  # 新增：成功阈值2次
