@@ -1,4 +1,27 @@
-/* 全局样式重置 */
+/* 全局样式与主题变量 */
+:root {
+  /* 页面整体渐变（蓝紫） */
+  --overview-bg-start: #173fb7;
+  --overview-bg-mid: #2f55d4;
+  --overview-bg-end: #6a4df5;
+
+  /* 统计卡片渐变 */
+  --card-total-start: #6c4bd3;
+  --card-total-end: #8a5cf6;
+  --card-running-start: #22a565;
+  --card-running-end: #4cd17c;
+  --card-error-start: #ff6a4d;
+  --card-error-end: #ff9f1a;
+
+  /* 表格与文本 */
+  --table-bg: rgba(255, 255, 255, 0.96);
+  --text-on-dark: #ffffff;
+  --text-muted-on-dark: rgba(255, 255, 255, 0.85);
+  --border-soft: rgba(255, 255, 255, 0.25);
+}
+
+/* 细节微调：让字体更清晰 */
+html, body { text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * {
   margin: 0;
   padding: 0;

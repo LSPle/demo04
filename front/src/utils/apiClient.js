@@ -1,4 +1,4 @@
-import { message } from 'antd';
+import { message } from 'ant-design-vue';
 import { API_ENDPOINTS } from '../config/api';
 
 /**
@@ -27,6 +27,40 @@ class ApiClient {
 
 
   /**
+   * 获取JWT token
+   */
+  getToken() {
+    try {
+      return localStorage.getItem('access_token');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * 设置JWT token
+   */
+  setToken(token) {
+    try {
+      localStorage.setItem('access_token', token);
+    } catch (error) {
+      console.error('Failed to store token:', error);
+    }
+  }
+
+  /**
+   * 清除JWT token
+   */
+  clearToken() {
+    try {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('userId');
+    } catch (error) {
+      console.error('Failed to clear token:', error);
+    }
+  }
+
+  /**
    * 通用请求方法
    * @param {string} url - 请求URL
    * @param {Object} options - 请求选项
@@ -34,11 +68,20 @@ class ApiClient {
    * @returns {Promise<Object>} 响应数据
    */
   async request(url, options = {}, showError = true) {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
+
+    // 为需要认证的请求添加Authorization头
+    const token = this.getToken();
+    if (token && !url.includes('/auth/login') && !url.includes('/auth/register')) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
     const defaultOptions = {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: this.defaultTimeout,
       ...options
     };
@@ -105,6 +148,34 @@ class ApiClient {
    */
   async delete(url, showError = true) {
     return this.request(url, { method: 'DELETE' }, showError);
+  }
+
+  /**
+   * 用户登录
+   */
+  async login(username, password) {
+    return this.post(API_ENDPOINTS.AUTH_LOGIN, { username, password }, true);
+  }
+
+  /**
+   * 用户注册
+   */
+  async register(username, password) {
+    return this.post(API_ENDPOINTS.AUTH_REGISTER, { username, password }, true);
+  }
+
+  /**
+   * 用户登出
+   */
+  async logout() {
+    return this.post(API_ENDPOINTS.AUTH_LOGOUT, {}, true);
+  }
+
+  /**
+   * 获取当前用户信息
+   */
+  async getCurrentUser() {
+    return this.get(API_ENDPOINTS.AUTH_ME, true);
   }
 
   /**

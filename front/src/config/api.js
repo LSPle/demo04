@@ -1,9 +1,15 @@
-// API配置
-// 后端服务地址 - 优先从环境变量读取，默认使用本地后端地址
+// API配置 (Vite + Vue)
+// 后端服务地址 - 优先从 Vite 环境变量读取，默认使用本地后端地址
 // 注意：开发模式下后端 run.py 默认端口为 5000
-const API_BASE_URL = (process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000').replace(/\/+$/, '');
 
 export const API_ENDPOINTS = {
+  // 认证相关接口
+  AUTH_LOGIN: `${API_BASE_URL}/api/auth/login`,
+  AUTH_REGISTER: `${API_BASE_URL}/api/auth/register`,
+  AUTH_LOGOUT: `${API_BASE_URL}/api/auth/logout`,
+  AUTH_ME: `${API_BASE_URL}/api/auth/me`,
+
   INSTANCES: `${API_BASE_URL}/api/instances`,
   INSTANCE_DATABASES: (id) => `${API_BASE_URL}/api/instances/${id}/databases`,
   INSTANCE_DETAIL: (id) => `${API_BASE_URL}/api/instances/${id}`,
