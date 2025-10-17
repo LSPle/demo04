@@ -1,70 +1,88 @@
 <template>
   <div class="sql-optimization-container">
     <!-- 页面标题区 -->
-    <div class="page-header">
-      <h2 class="page-title">SQL审核优化</h2>
-      <p class="page-desc">对数据库性能进行分析，并提供优化建议</p>
+    <div class="config-header">
+      <h2 class="config-title">SQL审核优化</h2>
+      <p class="config-desc">对数据库性能进行分析，并提供优化建议</p>
     </div>
 
-    <!-- 表单区域 -->
-    <div class="form-container">
-      <div class="form-item">
-        <label class="form-label">目标数据库</label>
-        <div class="form-selects">
-          <a-select 
-            v-model:value="selectedInstance" 
-            placeholder="选择实例" 
-            @change="handleInstanceChange"
-            class="instance-select"
-          >
-            <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </a-select-option>
-          </a-select>
-        </div>
-        <!-- 数据库下拉：仅在选择实例后显示 -->
-        <transition name="slide-down">
-          <div v-if="selectedInstance" class="database-dropdown">
-            <div class="database-label">选择数据库</div>
+    <!-- 控制区（与配置优化一致的布局） -->
+    <div class="control-section">
+      <a-card title="实例选择" class="control-card">
+        <a-space direction="vertical" style="width: 100%">
+          <!-- 实例选择器 -->
+          <div class="form-selects">
             <a-select 
-              v-model:value="selectedDatabase" 
-              placeholder="选择数据库"
-              class="database-select"
+              v-model:value="selectedInstance" 
+              placeholder="选择实例" 
+              @change="handleInstanceChange"
+              class="instance-select"
             >
-              <a-select-option v-for="opt in databaseOptions" :key="opt.value" :value="opt.value">
+              <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
                 {{ opt.label }}
               </a-select-option>
             </a-select>
           </div>
-        </transition>
-      </div>
 
-      <div class="form-item">
-        <label class="form-label">SQL 语句</label>
-        <a-textarea 
-          v-model:value="sqlQuery" 
-          :rows="8" 
-          placeholder="请输入需要分析的 SQL 语句"
-          class="sql-textarea"
-        />
-      </div>
+          <!-- 数据库下拉：仅在选择实例后显示 -->
+          <transition name="slide-down">
+            <div v-if="selectedInstance" class="database-dropdown">
+              <div class="database-label">选择数据库</div>
+              <a-select 
+                v-model:value="selectedDatabase" 
+                placeholder="选择数据库"
+                class="database-select"
+              >
+                <a-select-option v-for="opt in databaseOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </a-select-option>
+              </a-select>
+            </div>
+          </transition>
 
-      <div class="form-actions">
-        <a-button type="primary" @click="executeSqlAnalysis" :loading="isAnalyzing" class="analyze-btn">
-          开始分析
-        </a-button>
-        <a-button @click="resetForm" class="reset-btn">
-          重置
-        </a-button>
-      </div>
+          <!-- SQL 输入区 -->
+          <div>
+            <label class="form-label">SQL 语句</label>
+            <a-textarea 
+              v-model:value="sqlQuery" 
+              :rows="8" 
+              placeholder="请输入需要分析的 SQL 语句"
+              class="sql-textarea"
+            />
+          </div>
+
+          <!-- 操作按钮 -->
+          <a-space>
+            <a-button type="primary" @click="executeSqlAnalysis" :loading="isAnalyzing" class="start-analysis-btn">
+              开始分析
+            </a-button>
+            <a-button @click="resetForm" class="reset-btn">
+              重置
+            </a-button>
+          </a-space>
+        </a-space>
+      </a-card>
     </div>
 
-    <!-- 结果展示区域 -->
-    <div v-if="optimizationResults" class="results-container">
-      <h3 class="results-title">分析结果</h3>
-      <div class="results-content">
-        <pre>{{ optimizationResults }}</pre>
-      </div>
+    <!-- 数据展示卡片（与配置优化一致的布局） -->
+    <div class="data-display-section">
+      <a-card title="分析结果" class="data-display-card">
+        <!-- 等待态：无结果时显示 -->
+        <div v-if="!optimizationResults" class="waiting-state">
+          <a-empty description="等待分析结果">
+            <template #description>
+              <span style="color: #999;">请选择实例、数据库并填写SQL后点击“开始分析”</span>
+            </template>
+          </a-empty>
+        </div>
+
+        <!-- 加载完成态：有结果时显示 -->
+        <div v-else class="data-loaded-state">
+          <div class="results-content">
+            <pre>{{ optimizationResults }}</pre>
+          </div>
+        </div>
+      </a-card>
     </div>
   </div>
 </template>
@@ -163,40 +181,36 @@ onMounted(() => {
 
 <style scoped>
 .sql-optimization-container {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: 100vh;
-  padding: 24px;
+  padding: 0;
 }
 
-.page-header {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  padding: 24px;
+.config-header {
   margin-bottom: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
 }
 
-.page-title {
+.config-title {
+  margin: 0 0 8px 0;
   font-size: 24px;
   font-weight: 600;
-  margin: 0 0 8px 0;
-  color: #1a1a1a;
 }
 
-.page-desc {
+.config-desc {
   margin: 0;
-  color: #666;
   font-size: 14px;
+  opacity: 0.9;
 }
 
-.form-container {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  padding: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+.control-section {
   margin-bottom: 24px;
+}
+
+.control-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .form-item {
@@ -258,24 +272,8 @@ onMounted(() => {
   font-family: 'Courier New', monospace;
 }
 
-.form-actions {
-  display: flex;
-  gap: 12px;
-  margin-top: 32px;
-}
-
-.analyze-btn {
-  background: #1890ff;
-  border-color: #1890ff;
-  border-radius: 8px;
-  height: 40px;
-  padding: 0 24px;
-  font-weight: 500;
-}
-
-.analyze-btn:hover {
-  background: #40a9ff;
-  border-color: #40a9ff;
+.start-analysis-btn {
+  min-width: 100px;
 }
 
 .reset-btn {
@@ -285,12 +283,14 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.results-container {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  padding: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+
+.data-display-section {
+  margin-bottom: 24px;
+}
+
+.data-display-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .results-title {
@@ -385,6 +385,38 @@ onMounted(() => {
   opacity: 1;
   transform: translateY(0);
   max-height: 240px;
+}
+
+/* 配置优化页面的动画与等待/加载态 */
+.waiting-state {
+  padding: 40px 0;
+  text-align: center;
+}
+
+.data-loaded-state {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 768px) {

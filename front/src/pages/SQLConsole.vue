@@ -1,204 +1,212 @@
 <template>
   <div class="sql-console-container">
-    <!-- 顶部标题区 -->
-    <div class="console-header">
-      <div class="header-content">
-        <div class="header-left">
-          <h2 class="console-title">SQL窗口</h2>
-          <div class="instance-selector">
-            <a-select 
-              v-model:value="selectedInstance" 
-              placeholder="选择实例" 
-              @change="handleInstanceChange"
-              class="instance-select"
-            >
-              <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
-                {{ opt.label }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </div>
-        <div class="header-right">
-          <a-button @click="resetForm" class="reset-btn">重置</a-button>
-        </div>
-      </div>
+    <!-- 标题区：与配置优化页面一致 -->
+    <div class="config-header">
+      <div class="config-title">SQL窗口</div>
+      <div class="config-desc">查询数据库、执行SQL并查看历史记录</div>
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="console-main">
-      <!-- 左侧数据库结构区 -->
-      <div class="sidebar-container">
-        <div class="sidebar-header">
-          <span class="sidebar-title">数据库/表结构</span>
-          <a-button size="small" @click="handleRefreshDatabases" :loading="loadingDatabases" class="refresh-db-btn">
-            刷新
-          </a-button>
-        </div>
-        <div class="sidebar-content">
-          <div v-if="!selectedInstance" class="empty-state">
-            <div class="empty-icon">📁</div>
-            <div class="empty-text">请先选择实例</div>
-          </div>
-          <div v-else-if="loadingDatabases" class="loading-state">
-            <a-spin size="small" />
-            <span>加载中...</span>
-          </div>
-          <div v-else class="database-tree">
-            <div v-for="database in databaseList" :key="database.name" class="database-item">
-              <div 
-                 class="database-header" 
-                 @click="handleToggleDatabase(database.name)"
-                 :class="{ expanded: expandedDatabases.includes(database.name) }"
-               >
-                 <span class="expand-icon">
-                   {{ expandedDatabases.includes(database.name) ? '📂' : '📁' }}
-                 </span>
-                 <span class="database-name">{{ database.name }}</span>
-               </div>
-              <div v-if="expandedDatabases.includes(database.name)" class="table-list">
-                <div v-if="database.loading" class="table-loading">
-                  <a-spin size="small" />
-                  <span>加载表结构...</span>
-                </div>
-                <div v-else-if="database.tables?.length" class="tables">
-                  <div 
-                    v-for="table in database.tables" 
-                    :key="table.name" 
-                    class="table-item"
-                    @click="handleSelectTable(database.name, table.name)"
-                    :class="{ active: selectedTable === `${database.name}.${table.name}` }"
-                  >
-                    <span class="table-icon">📋</span>
-                    <span class="table-name">{{ table.name }}</span>
-                    <span class="table-type">{{ table.type || '表' }}</span>
-                  </div>
-                </div>
-                <div v-else class="no-tables">
-                  <span>暂无表</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- 控制区：左右卡片布局 -->
+    <div class="control-section">
+      <a-row :gutter="16">
+        <!-- 左侧：实例选择 + 数据库树 -->
+        <a-col :xs="24" :md="8">
+          <a-card class="control-card">
+            <template #title>
+              <div class="card-title">数据库/表结构</div>
+            </template>
+            <template #extra>
+              <a-button size="small" @click="handleRefreshDatabases" :loading="loadingDatabases" class="refresh-db-btn">
+                刷新
+              </a-button>
+            </template>
 
-      <!-- 右侧SQL编辑器区 -->
-      <div class="editor-container">
-        <!-- SQL编辑器 -->
-        <div class="editor-section">
-          <div class="editor-header">
-            <span class="editor-title">SQL编辑器</span>
-            <div class="editor-actions">
+            <div class="instance-selector">
               <a-select 
-                v-model:value="selectedDatabase" 
-                placeholder="选择数据库"
-                class="database-select"
-                size="small"
+                v-model:value="selectedInstance" 
+                placeholder="选择实例" 
+                @change="handleInstanceChange"
+                class="instance-select"
               >
-                <a-select-option v-for="db in databaseList" :key="db.name" :value="db.name">
-                  {{ db.name }}
+                <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
                 </a-select-option>
               </a-select>
-              <a-button type="primary" @click="executeSql" :loading="loading" size="small" class="execute-btn">
-                执行SQL
-              </a-button>
             </div>
+
+            <div class="sidebar-content">
+              <div v-if="!selectedInstance" class="empty-state">
+                <div class="empty-icon">📁</div>
+                <div class="empty-text">请先选择实例</div>
+              </div>
+              <div v-else-if="loadingDatabases" class="loading-state">
+                <a-spin size="small" />
+                <span>加载中...</span>
+              </div>
+              <div v-else class="database-tree">
+                <div v-for="database in databaseList" :key="database.name" class="database-item">
+                  <div 
+                    class="database-header" 
+                    @click="handleToggleDatabase(database.name)"
+                    :class="{ expanded: expandedDatabases.includes(database.name) }"
+                  >
+                    <span class="expand-icon">
+                      {{ expandedDatabases.includes(database.name) ? '📂' : '📁' }}
+                    </span>
+                    <span class="database-name">{{ database.name }}</span>
+                  </div>
+                  <div v-if="expandedDatabases.includes(database.name)" class="table-list">
+                    <div v-if="database.loading" class="table-loading">
+                      <a-spin size="small" />
+                      <span>加载表结构...</span>
+                    </div>
+                    <div v-else-if="database.tables?.length" class="tables">
+                      <div 
+                        v-for="table in database.tables" 
+                        :key="table.name" 
+                        class="table-item"
+                        @click="handleSelectTable(database.name, table.name)"
+                        :class="{ active: selectedTable === `${database.name}.${table.name}` }"
+                      >
+                        <span class="table-icon">📋</span>
+                        <span class="table-name">{{ table.name }}</span>
+                        <span class="table-type">{{ table.type || '表' }}</span>
+                      </div>
+                    </div>
+                    <div v-else class="no-tables">
+                      <span>暂无表</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </a-card>
+        </a-col>
+
+        <!-- 右侧：SQL编辑器 -->
+        <a-col :xs="24" :md="16">
+          <a-card class="control-card">
+            <template #title>
+              <div class="card-title">SQL编辑器</div>
+            </template>
+            <div class="editor-section">
+              <div class="editor-header">
+                <div class="editor-actions">
+                  <a-select 
+                    v-model:value="selectedDatabase" 
+                    placeholder="选择数据库"
+                    class="database-select"
+                    size="small"
+                  >
+                    <a-select-option v-for="db in databaseList" :key="db.name" :value="db.name">
+                      {{ db.name }}
+                    </a-select-option>
+                  </a-select>
+                  <a-button @click="resetForm" class="reset-btn" size="small">重置</a-button>
+                  <a-button type="primary" @click="executeSql" :loading="loading" size="small" class="execute-btn">
+                    执行SQL
+                  </a-button>
+                </div>
+              </div>
+              <div class="editor-content">
+                <a-textarea 
+                  v-model:value="sql" 
+                  :rows="12" 
+                  placeholder="请输入SQL语句..."
+                  class="sql-editor"
+                />
+              </div>
+            </div>
+          </a-card>
+        </a-col>
+      </a-row>
+    </div>
+
+    <!-- 数据展示区：与配置优化页面一致 -->
+    <div class="data-display-section">
+      <a-card class="data-display-card">
+        <div class="results-tabs">
+          <div 
+            class="tab-item" 
+            :class="{ active: activeTab === 'result' }"
+            @click="activeTab = 'result'"
+          >
+            执行结果
           </div>
-          <div class="editor-content">
-            <a-textarea 
-              v-model:value="sql" 
-              :rows="12" 
-              placeholder="请输入SQL语句..."
-              class="sql-editor"
-            />
+          <div 
+            class="tab-item" 
+            :class="{ active: activeTab === 'history' }"
+            @click="activeTab = 'history'"
+          >
+            执行历史
           </div>
         </div>
-
-        <!-- 结果展示区 -->
-        <div class="results-section">
-          <div class="results-tabs">
-            <div 
-              class="tab-item" 
-              :class="{ active: activeTab === 'result' }"
-              @click="activeTab = 'result'"
-            >
-              执行结果
+        <div class="results-content">
+          <div v-if="activeTab === 'result'" class="result-panel">
+            <div v-if="!result" class="empty-result">
+              <div class="empty-icon">📊</div>
+              <div class="empty-text">暂无执行结果</div>
             </div>
-            <div 
-              class="tab-item" 
-              :class="{ active: activeTab === 'history' }"
-              @click="activeTab = 'history'"
-            >
-              执行历史
+            <div v-else class="result-data">
+              <div v-if="resultTable.columns.length" class="table-result">
+                <a-table 
+                  :columns="resultTable.columns" 
+                  :data-source="resultTable.rows" 
+                  :pagination="{ pageSize: 50, showSizeChanger: true }"
+                  rowKey="_rowKey" 
+                  size="small"
+                  class="result-table"
+                />
+              </div>
+              <div v-else class="text-result">
+                <pre>{{ pretty(result) }}</pre>
+              </div>
             </div>
           </div>
-          <div class="results-content">
-            <div v-if="activeTab === 'result'" class="result-panel">
-              <div v-if="!result" class="empty-result">
-                <div class="empty-icon">📊</div>
-                <div class="empty-text">暂无执行结果</div>
-              </div>
-              <div v-else class="result-data">
-                <div v-if="resultTable.columns.length" class="table-result">
-                  <a-table 
-                    :columns="resultTable.columns" 
-                    :data-source="resultTable.rows" 
-                    :pagination="{ pageSize: 50, showSizeChanger: true }"
-                    rowKey="_rowKey" 
-                    size="small"
-                    class="result-table"
-                  />
-                </div>
-                <div v-else class="text-result">
-                  <pre>{{ pretty(result) }}</pre>
-                </div>
-              </div>
+          <div v-if="activeTab === 'history'" class="history-panel">
+            <div v-if="!executionHistory.length" class="empty-result">
+              <div class="empty-icon">📝</div>
+              <div class="empty-text">暂无执行历史</div>
             </div>
-            <div v-if="activeTab === 'history'" class="history-panel">
-              <div v-if="!executionHistory.length" class="empty-result">
-                <div class="empty-icon">📝</div>
-                <div class="empty-text">暂无执行历史</div>
+            <div v-else class="history-list">
+              <div class="history-header">
+                <span class="history-count">共 {{ executionHistory.length }} 条记录</span>
+                <a-button size="small" @click="clearHistory" class="clear-btn">清空历史</a-button>
               </div>
-              <div v-else class="history-list">
-                <div class="history-header">
-                  <span class="history-count">共 {{ executionHistory.length }} 条记录</span>
-                  <a-button size="small" @click="clearHistory" class="clear-btn">清空历史</a-button>
-                </div>
-                <div class="history-items">
-                  <div 
-                    v-for="item in executionHistory" 
-                    :key="item.id" 
-                    class="history-item"
-                    :class="{ 'error': !item.success }"
-                  >
-                    <div class="history-item-header">
-                      <div class="history-meta">
-                        <span class="history-time">{{ formatTime(item.timestamp) }}</span>
-                        <span class="history-database">{{ item.database }}</span>
-                        <span class="history-status" :class="item.success ? 'success' : 'error'">
-                          {{ item.success ? '成功' : '失败' }}
-                        </span>
-                        <span v-if="item.duration" class="history-duration">{{ item.duration }}ms</span>
-                      </div>
-                      <div class="history-actions">
-                        <a-button size="small" @click="rerunSql(item)" class="rerun-btn">重新执行</a-button>
-                        <a-button size="small" @click="deleteSingleHistory(item.id)" class="delete-btn">删除</a-button>
-                      </div>
+              <div class="history-items">
+                <div 
+                  v-for="item in executionHistory" 
+                  :key="item.id" 
+                  class="history-item"
+                  :class="{ 'error': !item.success }"
+                >
+                  <div class="history-item-header">
+                    <div class="history-meta">
+                      <span class="history-time">{{ formatTime(item.timestamp) }}</span>
+                      <span class="history-database">{{ item.database }}</span>
+                      <span class="history-status" :class="item.success ? 'success' : 'error'">
+                        {{ item.success ? '成功' : '失败' }}
+                      </span>
+                      <span v-if="item.duration" class="history-duration">{{ item.duration }}ms</span>
                     </div>
-                    <div class="history-sql">
-                      <pre>{{ item.sql }}</pre>
+                    <div class="history-actions">
+                      <a-button size="small" @click="rerunSql(item)" class="rerun-btn">重新执行</a-button>
+                      <a-button size="small" @click="deleteSingleHistory(item.id)" class="delete-btn">删除</a-button>
                     </div>
-                    <div v-if="item.error" class="history-error">
-                      <span class="error-label">错误信息：</span>
-                      <span class="error-message">{{ item.error }}</span>
-                    </div>
+                  </div>
+                  <div class="history-sql">
+                    <pre>{{ item.sql }}</pre>
+                  </div>
+                  <div v-if="item.error" class="history-error">
+                    <span class="error-label">错误信息：</span>
+                    <span class="error-message">{{ item.error }}</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </a-card>
     </div>
   </div>
 </template>
@@ -524,19 +532,31 @@ function clearHistory() {
 
 <style scoped>
 .sql-console-container {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
-  padding: 16px;
+  padding: 0;
   display: flex;
   flex-direction: column;
 }
 
-.console-header {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  padding: 16px 24px;
-  margin-bottom: 16px;
-  backdrop-filter: blur(10px);
+/* 与配置优化页面一致的标题区 */
+.config-header {
+  margin-bottom: 24px;
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+}
+
+.config-title {
+  margin: 0 0 8px 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.config-desc {
+  margin: 0;
+  font-size: 14px;
+  opacity: 0.9;
 }
 
 .header-content {
@@ -572,23 +592,21 @@ function clearHistory() {
   height: 36px;
 }
 
-.console-main {
-  display: flex;
-  gap: 16px;
-  flex: 1;
-  min-height: 0;
+/* 控制区与卡片样式，与配置优化页面保持一致 */
+.control-section {
+  margin-bottom: 24px;
 }
 
-.sidebar-container {
-  width: 300px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 120px);
-  min-height: 500px;
+.control-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+.instance-selector {
+  margin-bottom: 12px;
+}
+
+/* 侧边内容与编辑器在卡片中展示 */
 
 .sidebar-header {
   padding: 16px;
@@ -613,6 +631,7 @@ function clearHistory() {
   overflow-x: hidden;
   padding: 8px;
   min-height: 0;
+  max-height: 50vh;
 }
 
 .empty-state, .loading-state {
@@ -743,9 +762,6 @@ function clearHistory() {
 }
 
 .editor-section {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
   height: 400px;
@@ -802,14 +818,14 @@ function clearHistory() {
   font-family: 'Courier New', monospace;
 }
 
-.results-section {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  display: flex;
-  flex-direction: column;
-  min-height: 300px;
+/* 数据展示区卡片样式，与配置优化页面保持一致 */
+.data-display-section {
+  margin-bottom: 24px;
+}
+
+.data-display-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .results-tabs {
@@ -1104,6 +1120,25 @@ function clearHistory() {
 }
 
 .history-items::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* 侧边栏滚动条样式 */
+.sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-content::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.sidebar-content::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
 }
 </style>

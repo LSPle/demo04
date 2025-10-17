@@ -41,4 +41,6 @@ class Instance(db.Model):
             'status': self.status,
             'userId': self.user_id,
             'addTime': self.add_time.strftime('%Y-%m-%d %H:%M:%S') if self.add_time else None,
+            # 兼容前端字段名：创建时间
+            'createTime': self.add_time.strftime('%Y-%m-%d %H:%M:%S') if self.add_time else None,
         }

@@ -15,6 +15,9 @@ class SystemMetricsService:
         self.cache_duration = 5  # 缓存5秒，避免频繁采集
         self._cache = {}
         self._last_update = 0
+        # 上一次磁盘IO快照（用于估算I/O延迟）
+        self._last_disk_io: Optional[psutil._common.sdiskio] = None
+        self._last_disk_ts: float = 0.0
     
     def _should_update_cache(self) -> bool:
         """判断是否需要更新缓存"""
@@ -34,8 +37,28 @@ class SystemMetricsService:
             disk = psutil.disk_usage('/')
             disk_percent = (disk.used / disk.total) * 100
             
-            # 磁盘I/O统计
+            # 磁盘I/O统计（含读写次数/字节/耗时）
             disk_io = psutil.disk_io_counters()
+            now_ts = time.time()
+
+            # 估算平均I/O延迟（毫秒/操作）：Δ(read_time+write_time) / Δ(read_count+write_count)
+            io_latency_ms = None
+            try:
+                if disk_io is not None and hasattr(disk_io, 'read_time') and hasattr(disk_io, 'write_time'):
+                    if self._last_disk_io is not None:
+                        read_time_diff = max(0, (getattr(disk_io, 'read_time', 0) or 0) - (getattr(self._last_disk_io, 'read_time', 0) or 0))
+                        write_time_diff = max(0, (getattr(disk_io, 'write_time', 0) or 0) - (getattr(self._last_disk_io, 'write_time', 0) or 0))
+                        op_count_diff = max(0, (getattr(disk_io, 'read_count', 0) or 0) - (getattr(self._last_disk_io, 'read_count', 0) or 0)) 
+                        op_count_diff += max(0, (getattr(disk_io, 'write_count', 0) or 0) - (getattr(self._last_disk_io, 'write_count', 0) or 0))
+
+                        if op_count_diff > 0:
+                            # psutil 的 read_time/write_time 通常是毫秒
+                            io_latency_ms = round((read_time_diff + write_time_diff) / op_count_diff, 2)
+                    # 更新快照
+                    self._last_disk_io = disk_io
+                    self._last_disk_ts = now_ts
+            except Exception:
+                io_latency_ms = None
             
             # 网络I/O统计
             net_io = psutil.net_io_counters()
@@ -53,7 +76,8 @@ class SystemMetricsService:
                     'read_bytes': disk_io.read_bytes if disk_io else 0,
                     'write_bytes': disk_io.write_bytes if disk_io else 0,
                     'read_count': disk_io.read_count if disk_io else 0,
-                    'write_count': disk_io.write_count if disk_io else 0
+                    'write_count': disk_io.write_count if disk_io else 0,
+                    'io_latency_ms': io_latency_ms
                 },
                 'network_io': {
                     'bytes_sent': net_io.bytes_sent if net_io else 0,
@@ -75,6 +99,7 @@ class SystemMetricsService:
                     'disk_usage': None,
                     'disk_io': None,
                     'network_io': None,
+                    'io_latency_ms': None,
                     'timestamp': int(time.time())
                 }
     
@@ -101,6 +126,13 @@ class SystemMetricsService:
         if self._should_update_cache():
             self._update_cache()
         return self._cache.get('disk_io')
+
+    def get_io_latency_ms(self) -> Optional[float]:
+        """获取估算的平均磁盘I/O延迟（毫秒/操作）"""
+        if self._should_update_cache():
+            self._update_cache()
+        dio = self._cache.get('disk_io') or {}
+        return dio.get('io_latency_ms')
     
     def get_network_io_stats(self) -> Optional[Dict[str, Any]]:
         """获取网络I/O统计"""
@@ -120,6 +152,7 @@ class SystemMetricsService:
             'disk_usage': self._cache.get('disk_usage'),
             'disk_io': self._cache.get('disk_io'),
             'network_io': self._cache.get('network_io'),
+            'io_latency_ms': (self._cache.get('disk_io') or {}).get('io_latency_ms'),
             'timestamp': self._cache.get('timestamp')
         }
     

@@ -15,7 +15,10 @@ def analyze_slowlog(instance_id: int):
     user_id = request.args.get('userId')
     
     # 查找实例
-    instance = Instance.query.filter_by(id=instance_id, user_id=user_id).first()
+    q = Instance.query
+    if user_id:
+        q = q.filter_by(user_id=user_id)
+    instance = q.filter_by(id=instance_id).first()
     if not instance:
         return jsonify({'error': '实例不存在'}), 404
     
@@ -29,7 +32,21 @@ def analyze_slowlog(instance_id: int):
     success, result, message = slowlog_service.analyze(instance, top=top, min_avg_ms=min_avg_ms, tail_kb=tail_kb)
     
     if success:
-        return jsonify(result), 200
+        # 兼容前端显示：补充 avg_time_ms 与 rows_examined 字段
+        data = result or {}
+        tops = list(data.get('ps_top') or [])
+        formatted_tops = []
+        for t in tops:
+            item = dict(t or {})
+            # 将 avg_latency_ms 同步为 avg_time_ms（ms）
+            if 'avg_latency_ms' in item and 'avg_time_ms' not in item:
+                item['avg_time_ms'] = item.get('avg_latency_ms')
+            # 将 rows_examined_avg 同步为 rows_examined（平均扫描行数）
+            if 'rows_examined_avg' in item and 'rows_examined' not in item:
+                item['rows_examined'] = item.get('rows_examined_avg')
+            formatted_tops.append(item)
+        data['ps_top'] = formatted_tops
+        return jsonify(data), 200
     else:
         return jsonify({'error': message}), 400
 
@@ -39,7 +56,10 @@ def list_slowlog(instance_id: int):
     user_id = request.args.get('userId')
     
     # 查找实例
-    instance = Instance.query.filter_by(id=instance_id, user_id=user_id).first()
+    q = Instance.query
+    if user_id:
+        q = q.filter_by(user_id=user_id)
+    instance = q.filter_by(id=instance_id).first()
     if not instance:
         return jsonify({'error': '实例不存在'}), 404
     
@@ -64,6 +84,23 @@ def list_slowlog(instance_id: int):
     success, result, message = slowlog_service.list_from_table(instance, page=page, page_size=page_size, filters=filters)
     
     if success:
-        return jsonify(result), 200
+        # 兼容前端表格字段需求：query、count、avg_time_ms、rows_examined
+        data = result or {}
+        items = list(data.get('items') or [])
+        formatted = []
+        for it in items:
+            q_sec = it.get('query_time')
+            try:
+                avg_ms = round(float(q_sec) * 1000, 2)
+            except Exception:
+                avg_ms = 0
+            formatted.append({
+                'query': it.get('sql_text') or it.get('query') or '',
+                'count': 1,  # 表抽样为单条记录，次数记为1
+                'avg_time_ms': avg_ms,
+                'rows_examined': it.get('rows_examined', 0),
+            })
+        data['items'] = formatted
+        return jsonify(data), 200
     else:
         return jsonify({'error': message}), 400

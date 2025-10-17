@@ -232,8 +232,39 @@ def get_instance(instance_id):
         instance = get_user_instances_query(user_id).filter_by(id=instance_id).first()
         if not instance:
             return jsonify({'error': '实例不存在'}), 404
-        
-        return jsonify(instance.to_dict()), 200
+        # 基础信息
+        data = instance.to_dict()
+
+        # 尝试获取数据库版本号（MySQL）
+        try:
+            conn = pymysql.connect(
+                host=instance.host,
+                port=int(instance.port or 3306),
+                user=instance.username or '',
+                password=instance.password or '',
+                database='mysql',
+                charset='utf8mb4',
+                connect_timeout=2,
+                read_timeout=2,
+                write_timeout=2,
+                cursorclass=pymysql.cursors.Cursor
+            )
+            try:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT VERSION()')
+                    row = cur.fetchone()
+                    if row:
+                        data['version'] = str(row[0])
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        except Exception:
+            # 无法连接或无权限时不抛错，版本号置为未知
+            data['version'] = data.get('version') or None
+
+        return jsonify(data), 200
         
     except Exception as e:
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500

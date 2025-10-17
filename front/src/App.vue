@@ -10,7 +10,12 @@
     <a-layout>
       <HeaderBar />
       <a-layout-content style="padding: 16px">
-        <router-view />
+        <!-- 使用 KeepAlive 缓存非登录页的各个页面组件，返回时保留之前内容 -->
+        <router-view v-slot="{ Component }">
+          <keep-alive>
+            <component :is="Component" />
+          </keep-alive>
+        </router-view>
       </a-layout-content>
     </a-layout>
   </a-layout>

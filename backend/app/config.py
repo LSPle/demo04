@@ -14,9 +14,6 @@ class Config:
     # 关闭SQLAlchemy的修改跟踪，节省性能
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # Prometheus用于数据库性能监控、指标采集
-    PROMETHEUS_BASE_URL = os.getenv("PROMETHEUS_BASE_URL", "http://192.168.112.128:9090")
-
     # MySQL数据库配置 - 直接从.env读取
     MYSQL_USER = os.getenv("MYSQL_USER")
     MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")

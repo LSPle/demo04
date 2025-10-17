@@ -157,11 +157,14 @@ function getStatusText(status) {
 }
 
 function formatDateTime(time) {
-  if (!time) return '2025-06-20 11:57:13';
+  if (!time) return '-';
   try {
-    return new Date(time).toLocaleString('zh-CN');
+    const val = typeof time === 'string' ? time.replace(' ', 'T') : time;
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return String(time);
+    return d.toLocaleString('zh-CN');
   } catch {
-    return '2025-06-20 11:57:13';
+    return String(time);
   }
 }
 

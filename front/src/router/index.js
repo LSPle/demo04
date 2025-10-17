@@ -11,13 +11,13 @@ import Login from '../pages/Login.vue';
 
 const routes = [
   { path: '/', redirect: '/overview' },
-  { path: '/overview', component: InstanceOverview },
-  { path: '/management', component: InstanceManagement },
-  { path: '/sql-optimization', component: SQLOptimization },
-  { path: '/sql-console', component: SQLConsole },
-  { path: '/architecture', component: ArchitectureOptimization },
-  { path: '/slowlog', component: SlowQueryLogs },
-  { path: '/config-optimization', component: ConfigOptimization },
+  { path: '/overview', component: InstanceOverview, meta: { keepAlive: true } },
+  { path: '/management', component: InstanceManagement, meta: { keepAlive: true } },
+  { path: '/sql-optimization', component: SQLOptimization, meta: { keepAlive: true } },
+  { path: '/sql-console', component: SQLConsole, meta: { keepAlive: true } },
+  { path: '/architecture', component: ArchitectureOptimization, meta: { keepAlive: true } },
+  { path: '/slowlog', component: SlowQueryLogs, meta: { keepAlive: true } },
+  { path: '/config-optimization', component: ConfigOptimization, meta: { keepAlive: true } },
   { path: '/login', component: Login },
 ];
 

@@ -164,12 +164,18 @@ class DirectMySQLMetricsService:
             '''查看数据'''
             logger.info(f"Performance P95 查询返回{p95_result}")
             p95_latency_ms = None
+            slowest_query_ms = None
             if p95_result and p95_result['rows']:
                 # 简单取前5%的平均值作为P95近似值
                 rows = p95_result['rows']
                 if len(rows) > 0:
                     p95_index = max(1, int(len(rows) * 0.05))  # 取前5%
                     p95_latency_ms = sum(row[0] for row in rows[:p95_index]) / p95_index
+                    # 记录最慢查询的平均延迟（按avg_timer_wait降序）
+                    try:
+                        slowest_query_ms = float(rows[0][0] or 0)
+                    except Exception:
+                        slowest_query_ms = None
             
             # 获取第一个查询的完整结果
             first_row = result['rows'][0]
@@ -179,7 +185,8 @@ class DirectMySQLMetricsService:
                 'p95_latency_ms': p95_latency_ms,
                 'avg_response_time_ms': first_row[0],
                 'statement_count': first_row[1],
-                'total_executions': first_row[2]
+                'total_executions': first_row[2],
+                'slowest_query_ms': slowest_query_ms
             }
             
         except Exception as e:
@@ -304,7 +311,8 @@ class DirectMySQLMetricsService:
             SHOW GLOBAL STATUS WHERE Variable_name IN (
                 'Threads_connected', 'Threads_running',
                 'Innodb_row_lock_waits', 'Innodb_row_lock_time',
-                'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads'
+                'Innodb_buffer_pool_read_requests', 'Innodb_buffer_pool_reads',
+                'Max_used_connections'
             )
             """
             
@@ -349,20 +357,56 @@ class DirectMySQLMetricsService:
             
             # 获取Redo写入延迟
             redo_write_latency_ms = None
+            # A: 优先尝试 MySQL 8.0 的 SHOW GLOBAL STATUS 口径
             try:
-                redo_query = """
-                SELECT name, `count` FROM information_schema.innodb_metrics
-                WHERE status='enabled' AND name IN ('log_write_time','log_writes')
+                status_redo_query = """
+                SHOW GLOBAL STATUS WHERE Variable_name IN (
+                    'Innodb_redo_log_write_time','Innodb_redo_log_writes'
+                )
                 """
-                redo_result = self._execute_query(conn, redo_query)
-                if redo_result and redo_result['rows']:
-                    kv = {r[0]: float(r[1] or 0) for r in redo_result['rows']}
-                    writes = kv.get('log_writes', 0.0)
-                    write_time_us = kv.get('log_write_time', 0.0)
-                    if writes > 0:
-                        redo_write_latency_ms = round((write_time_us / writes) / 1000.0, 2)
+                sres = self._execute_query(conn, status_redo_query)
+                if sres and sres['rows']:
+                    kv = {row[0]: float(row[1] or 0) for row in sres['rows']}
+                    writes = kv.get('Innodb_redo_log_writes', 0.0)
+                    write_time_us = kv.get('Innodb_redo_log_write_time', 0.0)
+                    if writes and writes > 0 and write_time_us and write_time_us > 0:
+                        redo_write_latency_ms = round((write_time_us / writes) / 1000.0, 3)
             except Exception:
-                redo_write_latency_ms = None
+                pass
+
+            # B: 次选使用 information_schema.innodb_metrics 的写入时间
+            if redo_write_latency_ms is None:
+                try:
+                    redo_query = """
+                    SELECT name, `count` FROM information_schema.innodb_metrics
+                    WHERE status='enabled' AND name IN ('log_write_time','log_writes')
+                    """
+                    redo_result = self._execute_query(conn, redo_query)
+                    if redo_result and redo_result['rows']:
+                        kv = {r[0]: float(r[1] or 0) for r in redo_result['rows']}
+                        writes = kv.get('log_writes', 0.0)
+                        write_time_us = kv.get('log_write_time', 0.0)
+                        if writes and writes > 0 and write_time_us and write_time_us > 0:
+                            redo_write_latency_ms = round((write_time_us / writes) / 1000.0, 3)
+                except Exception:
+                    pass
+
+            # C: 再次回退为 flush 时间近似值（若存在）
+            if redo_write_latency_ms is None:
+                try:
+                    flush_query = """
+                    SELECT name, `count` FROM information_schema.innodb_metrics
+                    WHERE status='enabled' AND name IN ('log_flush_total_time','log_writes')
+                    """
+                    fres = self._execute_query(conn, flush_query)
+                    if fres and fres['rows']:
+                        kv = {r[0]: float(r[1] or 0) for r in fres['rows']}
+                        writes = kv.get('log_writes', 0.0)
+                        flush_time_us = kv.get('log_flush_total_time', 0.0)
+                        if writes and writes > 0 and flush_time_us and flush_time_us > 0:
+                            redo_write_latency_ms = round((flush_time_us / writes) / 1000.0, 3)
+                except Exception:
+                    pass
             
             return {
                 'threads_connected': status_vars.get('Threads_connected'),
@@ -371,7 +415,8 @@ class DirectMySQLMetricsService:
                 'innodb_row_lock_time_ms': status_vars.get('Innodb_row_lock_time'),
                 'cache_hit_rate': cache_hit_rate,
                 'deadlocks': deadlocks,
-                'redo_write_latency_ms': redo_write_latency_ms
+                'redo_write_latency_ms': redo_write_latency_ms,
+                'peak_connections': status_vars.get('Max_used_connections')
             }
             
         except Exception as e:
@@ -405,8 +450,101 @@ class DirectMySQLMetricsService:
         # 获取索引使用率
         index_metrics = self.get_index_usage_metrics(inst)
         metrics.update(index_metrics)
+
+        # 新增：最大连接数
+        try:
+            extra_max = self.get_variable_max_connections(inst)
+            if isinstance(extra_max, dict):
+                metrics.update(extra_max)
+        except Exception:
+            pass
+
+        # 新增：主从延迟（毫秒）
+        try:
+            repl = self.get_replication_metrics(inst)
+            if isinstance(repl, dict):
+                metrics.update(repl)
+        except Exception:
+            pass
         
         return metrics
+
+    def get_variable_max_connections(self, inst: Instance) -> dict:
+        """查询最大连接数。"""
+        try:
+            import pymysql
+            conn = pymysql.connect(
+                host=getattr(inst, 'host', 'localhost'),
+                port=int(getattr(inst, 'port', 3306)),
+                user=getattr(inst, 'username', 'root'),
+                password=getattr(inst, 'password', ''),
+                database=getattr(inst, 'database', 'mysql'),
+                cursorclass=pymysql.cursors.Cursor,
+                read_timeout=2,
+                write_timeout=2,
+                connect_timeout=2
+            )
+            try:
+                with conn.cursor() as cur:
+                    cur.execute('SELECT @@max_connections')
+                    row = cur.fetchone()
+                    if row is not None:
+                        try:
+                            val = int(row[0])
+                            return {'max_connections': val}
+                        except Exception:
+                            return {}
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        except Exception:
+            return {}
+
+    def get_replication_metrics(self, inst: Instance) -> dict:
+        """查询主从复制延迟（毫秒）。优先 SHOW SLAVE STATUS，其次 SHOW REPLICA STATUS。"""
+        try:
+            import pymysql
+            conn = pymysql.connect(
+                host=getattr(inst, 'host', 'localhost'),
+                port=int(getattr(inst, 'port', 3306)),
+                user=getattr(inst, 'username', 'root'),
+                password=getattr(inst, 'password', ''),
+                database=getattr(inst, 'database', 'mysql'),
+                cursorclass=pymysql.cursors.DictCursor,
+                read_timeout=2,
+                write_timeout=2,
+                connect_timeout=2
+            )
+            try:
+                delay_ms = None
+                with conn.cursor() as cur:
+                    for q in ['SHOW SLAVE STATUS', 'SHOW REPLICA STATUS']:
+                        try:
+                            cur.execute(q)
+                            row = cur.fetchone()
+                            if row:
+                                sec = row.get('Seconds_Behind_Master')
+                                if sec is None:
+                                    sec = row.get('Seconds_Behind_Source')
+                                if sec is not None:
+                                    try:
+                                        delay_ms = int(float(sec)) * 1000
+                                    except Exception:
+                                        pass
+                                break
+                        except Exception:
+                            # 尝试下一个查询
+                            continue
+                return {'replication_delay_ms': delay_ms}
+            finally:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        except Exception:
+            return {'replication_delay_ms': None}
 
 
 # 全局实例

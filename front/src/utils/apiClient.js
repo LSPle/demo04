@@ -292,17 +292,17 @@ class ApiClient {
   }
 
   /**
-   * 获取指标摘要（配置优化）
+   * 获取配置优化摘要（新路径 /config）
    */
-  async getMetricsSummary(instanceId) {
-    return this.get(this.appendUserId(API_ENDPOINTS.METRICS_SUMMARY(instanceId)));
+  async getConfigSummary(instanceId) {
+    return this.get(this.appendUserId(API_ENDPOINTS.CONFIG_SUMMARY(instanceId)));
   }
 
   /**
-   * 获取指标建议（DeepSeek，配置优化）
+   * 获取配置优化建议（DeepSeek，新路径 /config）
    */
-  async getMetricsAdvice(instanceId) {
-    return this.post(this.appendUserId(API_ENDPOINTS.METRICS_ADVISE(instanceId)), {}, true, { timeout: 300000 });
+  async getConfigAdvice(instanceId) {
+    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ADVISE(instanceId)), {}, true, { timeout: 300000 });
   }
 
 }
