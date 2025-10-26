@@ -1,15 +1,15 @@
 <template>
   <!-- 页面主容器 -->
-  <div class="container">
+  <div class="instance-overview-container">
     <!-- 页面标题区域 -->
-    <div class="header">
+    <div class="config-header">
       <div class="header-content">
         <div class="title-area">
-          <h2 class="title">实例概览</h2>
-          <p class="desc">数据库实例运行状态总览</p>
+          <h2 class="config-title">实例概览</h2>
+          <p class="config-desc">数据库实例运行状态总览</p>
         </div>
         <div class="button-area">
-          <a-button type="primary" @click="refresh" :loading="loading">
+          <a-button type="primary" @click="refresh" :loading="refreshing" class="btn-click-anim">
             刷新状态
           </a-button>
         </div>
@@ -26,12 +26,12 @@
       <div class="card running">
         <div class="icon">✅</div>
         <div class="number">{{ runningCount }}</div>
-        <div class="label">运行中</div>
+        <div class="label">成功数</div>
       </div>
       <div class="card error">
         <div class="icon">⚠️</div>
         <div class="number">{{ errorCount }}</div>
-        <div class="label">异常/关闭</div>
+        <div class="label">异常数</div>
       </div>
     </div>
 
@@ -58,8 +58,8 @@
             <span class="dbType">{{ record.dbType?.toUpperCase() || 'MYSQL' }}</span>
           </template>
           <template v-else-if="column.key === 'status'">
-            <a-tag :color="getStatusColor(record.status)">
-              {{ getStatusText(record.status) }}
+            <a-tag :color="getStatusColorByOk(statusMap[record.id])">
+              {{ getStatusTextByOk(statusMap[record.id]) }}
             </a-tag>
           </template>
         </template>
@@ -70,13 +70,20 @@
 
 <script setup>
 // 导入Vue相关功能
-import { ref, computed, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
 import apiClient from '../utils/apiClient';
 import { message } from 'ant-design-vue';
+import globalInstances from '../utils/globalInstances';
+
+let cacheClearedHandler = null;
 
 // 页面状态
 const loading = ref(false);  // 加载状态
 const instances = ref([]);   // 实例列表数据
+const refreshing = ref(false); // 刷新按钮禁用状态
+
+// 动态状态映射：{ [id]: boolean }
+const statusMap = reactive({});
 
 // 表格列配置
 const columns = [
@@ -94,201 +101,312 @@ const pagination = computed(() => ({
   showTotal: (total, range) => `共 ${total} 条记录`,
 }));
 
-// 统计数据
-const totalCount = computed(() => instances.value.length);
-const runningCount = computed(() => instances.value.filter(item => item.status === 'running').length);
-const errorCount = computed(() => instances.value.filter(item => item.status === 'error' || item.status === 'closed').length);
+// 统计数据（基于实时检测返回）
+const totalCount = ref(0);
+const runningCount = ref(0);
+const errorCount = ref(0);
 
-// 获取状态颜色
-function getStatusColor(status) {
-  if (status === 'running') return 'green';
-  if (status === 'error' || status === 'closed') return 'red';
+// 状态颜色/文本（按连接结果）
+function getStatusColorByOk(ok) {
+  if (ok === true) return 'green';
+  if (ok === false) return 'red';
   return 'default';
 }
-
-// 获取状态文本
-function getStatusText(status) {
-  if (status === 'running') return '运行中';
-  if (status === 'error') return '异常';
-  if (status === 'closed') return '已关闭';
+function getStatusTextByOk(ok) {
+  if (ok === true) return '运行中';
+  if (ok === false) return '异常';
   return '未知';
 }
 
-// 获取实例数据
-async function getInstances(showMessage = false) {
+// 使用全局状态管理加载实例数据
+async function loadInstancesData(showMessage = false) {
   try {
     loading.value = true;
-    const data = await apiClient.getInstances();
-    instances.value = Array.isArray(data) ? data : (Array.isArray(data?.instances) ? data.instances : []);
-    if (showMessage) message.success('刷新成功');
+    const success = await globalInstances.loadInstances(showMessage);
+    
+    if (success) {
+      // 从全局状态获取数据
+      instances.value = globalInstances.getAllInstances();
+      const globalStatusMap = globalInstances.getStatusMap();
+      
+      // 更新本地状态映射
+      Object.keys(statusMap).forEach(k => delete statusMap[k]);
+      Object.assign(statusMap, globalStatusMap);
+      
+      // 计算统计数据
+      const allInstances = globalInstances.getAllInstances();
+      const runningInstances = globalInstances.getRunningInstances();
+      
+      totalCount.value = allInstances.length;
+      runningCount.value = runningInstances.length;
+      errorCount.value = allInstances.length - runningInstances.length;
+      
+      if (showMessage) message.success('数据加载成功');
+    }
   } catch (error) {
     instances.value = [];
-    if (showMessage) message.error(error.message || '获取实例失败');
+    totalCount.value = 0;
+    runningCount.value = 0;
+    errorCount.value = 0;
+    if (showMessage) message.error(error.message || '加载数据失败');
   } finally {
     loading.value = false;
   }
-  //查看实例数据
-  console.log("实例数据:", instances.value);
-  
 }
 
-// 刷新数据
-function refresh() {
-  getInstances(true);
+// 刷新按钮
+async function refresh() {
+  try {
+    refreshing.value = true;
+    // 直接重新加载数据，避免触发全局清理导致的并发加载
+    await loadInstancesData(true);
+  } catch (e) {
+    message.error('刷新失败');
+  } finally {
+    refreshing.value = false;
+  }
 }
 
-// 页面加载时获取数据
-onMounted(() => {
-  getInstances(false);
+onMounted(async () => {
+  await loadInstancesData(false);
+  cacheClearedHandler = () => {
+    loadInstancesData(false);
+  };
+  window.addEventListener('instances-cache-cleared', cacheClearedHandler);
+});
+
+onUnmounted(() => {
+  if (cacheClearedHandler) {
+    window.removeEventListener('instances-cache-cleared', cacheClearedHandler);
+  }
 });
 </script>
 
 <style scoped>
-/* 页面主容器 */
-.container {
-  /* background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); */
-  min-height: 100vh;
-  padding: 24px;
+/* 实例概览页面样式 */
+.instance-overview-container {
+  background: none;
+  padding: 0;
 }
 
 /* 页面标题区域 */
-.header {
+.config-header {
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
   padding: 24px;
-  margin-bottom: 32px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
 }
 
-.title-area {
-  flex: 1;
-}
-
-.title {
+.config-title {
   font-size: 24px;
   font-weight: 600;
-  margin: 0 0 8px 0;
   color: #1a1a1a;
+  margin: 0;
 }
 
-.desc {
-  margin: 0;
-  color: #666;
+.config-desc {
+  margin: 4px 0 0 0;
   font-size: 14px;
+  color: #666;
+  opacity: 0.9;
 }
 
 .button-area {
-  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
 }
 
 /* 统计卡片区域 */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
-  margin-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .card {
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  padding: 24px 20px;
-  text-align: center;
-  transition: transform 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.3s ease;
 }
 
 .card:hover {
   transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 
-.icon {
+.card .icon {
+  font-size: 24px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.card .number {
   font-size: 28px;
-  margin-bottom: 12px;
-  display: block;
-}
-
-.number {
-  font-size: 40px;
   font-weight: 700;
-  margin-bottom: 6px;
+  color: #1a1a1a;
+  line-height: 1;
 }
 
-/* 不同类型卡片的数字颜色 */
-.total .number {
-  color: #667eea;
-}
-
-.running .number {
-  color: #4ade80;
-}
-
-.error .number {
-  color: #f87171;
-}
-
-.label {
+.card .label {
   font-size: 14px;
   color: #666;
-  font-weight: 500;
+  margin-top: 4px;
+}
+
+.card.total .icon {
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.card.running .icon {
+  background: rgba(82, 196, 26, 0.1);
+}
+
+.card.error .icon {
+  background: rgba(255, 77, 79, 0.1);
 }
 
 /* 数据表格区域 */
 .table {
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
   padding: 24px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-/* 表格样式 */
-.table :deep(.ant-table) {
-  background: transparent;
-}
-
-.table :deep(.ant-table-thead > tr > th) {
-  background: #fafafa;
-  border-bottom: 1px solid #e8e8e8;
-  font-weight: 600;
-  color: #333;
-}
-
-.table :deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid #f0f0f0;
-  padding: 16px 12px;
-}
-
-.table :deep(.ant-table-tbody > tr:hover > td) {
-  background: #f8f9ff;
-}
-
-/* 实例名称样式 */
+/* 表格内容样式 */
 .name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 16px;
-  margin-left: 10px;
+  font-weight: 500;
+  color: #1a1a1a;
 }
 
-.name-icon {
-  font-size: 14px;
-}
-
-/* 地址样式 */
 .address {
-  color: #666;
   font-family: 'Courier New', monospace;
-  font-size: 16px;
+  color: #666;
+  font-size: 13px;
 }
 
-.table .dbType{
-  color: #666;
-  font-size: 16px;
-  margin-left: 10px;
+.dbType {
+  font-weight: 500;
+  color: #1890ff;
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+}
+
+/* 表头（列名）居中 */
+.table :deep(.ant-table-thead > tr > th) {
+  text-align: center;
+}
+
+/* 表体（单元格）居中 */
+.table :deep(.ant-table-tbody > tr > td) {
+  text-align: center;
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.stats,
+.table {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .config-header {
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .config-title {
+    font-size: 20px;
+  }
+  
+  .config-desc {
+    font-size: 12px;
+  }
+  
+  .stats {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .card {
+    padding: 16px;
+  }
+  
+  .card .number {
+    font-size: 24px;
+  }
+  
+  .table {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .config-header {
+    padding: 12px;
+  }
+  
+  .config-title {
+    font-size: 18px;
+  }
+  
+  .card {
+    padding: 12px;
+    gap: 12px;
+  }
+  
+  .card .icon {
+    width: 40px;
+    height: 40px;
+    font-size: 20px;
+  }
+  
+  .card .number {
+    font-size: 20px;
+  }
+  
+  .table {
+    padding: 12px;
+  }
 }
 </style>

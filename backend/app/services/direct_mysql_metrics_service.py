@@ -34,7 +34,7 @@ class DirectMySQLMetricsService:
             logger.error(f"MySQL连接失败: {e}")
             return None
     #执行SQL查询并返回结果
-    def _execute_query(self, conn: pymysql.Connection, query: str):       
+    def execute_query(self, conn: pymysql.Connection, query: str):       
         try:
             cursor = conn.cursor()
             cursor.execute(query)
@@ -45,8 +45,9 @@ class DirectMySQLMetricsService:
         except Exception as e:
             logger.error(f"查询执行失败: {query}, 错误: {e}")
             return None
-    #取QPS和TPS指标
+    #取QPS和TPS指标(可能会有不准确的情况)
     def get_qps_tps_metrics(self, inst: Instance):
+        
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
@@ -61,20 +62,22 @@ class DirectMySQLMetricsService:
             )
             """
             
-            result = self._execute_query(conn, status_query)
+            result = self.execute_query(conn, status_query)
             if not result:
                 return {'qps': None, 'tps': None, 'error': '状态查询失败'}
             
             # 解析状态变量
             current_status = {}
+            # 打印完整 result 内容
+            logger.info(f"获取result的内容: {result}")
             for row in result['rows']:
                 var_name = row[0]
                 var_value = row[1]
-                if var_value.isdigit():
+                #本就不需要检测
+                if var_value and var_value.isdigit():
                     current_status[var_name] = int(var_value)
-                else:
+                else:            
                     current_status[var_name] = 0
-            
             # 计算QPS和TPS（需要两次采样的差值）
             qps = None
             tps = None
@@ -84,12 +87,12 @@ class DirectMySQLMetricsService:
                 time_diff = current_time - self._last_timestamp
                 if time_diff > 0:
                     # QPS = (当前Queries - 上次Queries) / 时间差
-                    queries_diff = current_status.get('Queries', 0) - self._last_status.get('Queries', 0)
+                    queries_diff = current_status.get('Queries') - self._last_status.get('Queries')
                     qps = round(queries_diff / time_diff, 2)
                     
                     # TPS = (当前事务数 - 上次事务数) / 时间差
-                    current_transactions = current_status.get('Com_commit', 0) + current_status.get('Com_rollback', 0)
-                    last_transactions = self._last_status.get('Com_commit', 0) + self._last_status.get('Com_rollback', 0)
+                    current_transactions = current_status.get('Com_commit') + current_status.get('Com_rollback')
+                    last_transactions = self._last_status.get('Com_commit') + self._last_status.get('Com_rollback')
                     transactions_diff = current_transactions - last_transactions
                     tps = round(transactions_diff / time_diff, 2)
             
@@ -97,11 +100,12 @@ class DirectMySQLMetricsService:
             self._last_status = current_status.copy()
             self._last_timestamp = current_time
             
+            #尝试删除0
             return {
                 'qps': qps,
                 'tps': tps,
-                'queries_total': current_status.get('Queries', 0),
-                'transactions_total': current_status.get('Com_commit', 0) + current_status.get('Com_rollback', 0)
+                'queries_total': current_status.get('Queries'),
+                'transactions_total': current_status.get('Com_commit') + current_status.get('Com_rollback')
             }
             
         except Exception as e:
@@ -109,6 +113,73 @@ class DirectMySQLMetricsService:
             return {'qps': None, 'tps': None, 'error': str(e)}
         finally:
             conn.close()
+
+    def get_qps_tps_window(self, inst: Instance, window_s: int = 6):
+        """在一次调用中完成两次采样，按窗口秒数计算 QPS/TPS。"""
+        conn = self._connect_to_mysql(inst)
+        if not conn:
+            return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
+        try:
+            status_query = """
+            SHOW GLOBAL STATUS WHERE Variable_name IN (
+                'Queries', 'Com_commit', 'Com_rollback'
+            )
+            """
+            # 第一次采样
+            t0 = time.time()
+            r1 = self.execute_query(conn, status_query)
+            if not r1 or not r1.get('rows'):
+                return {'qps': None, 'tps': None, 'error': '状态查询失败'}
+            s1: Dict[str, int] = {}
+            for row in r1['rows']:
+                name = row[0]
+                val = row[1]
+                try:
+                    s1[name] = int(val) if (val is not None and str(val).isdigit()) else 0
+                except Exception:
+                    s1[name] = 0
+            # 睡眠窗口秒数
+            try:
+                sleep_seconds = max(1, int(window_s))
+            except Exception:
+                sleep_seconds = 6
+            time.sleep(sleep_seconds)
+            # 第二次采样
+            t1 = time.time()
+            r2 = self.execute_query(conn, status_query)
+            if not r2 or not r2.get('rows'):
+                return {'qps': None, 'tps': None, 'error': '状态查询失败'}
+            s2: Dict[str, int] = {}
+            for row in r2['rows']:
+                name = row[0]
+                val = row[1]
+                try:
+                    s2[name] = int(val) if (val is not None and str(val).isdigit()) else 0
+                except Exception:
+                    s2[name] = 0
+            # 计算差值与速率
+            dt = max(1e-3, t1 - t0)
+            queries_diff = max(0, s2.get('Queries', 0) - s1.get('Queries', 0))
+            trx2 = s2.get('Com_commit', 0) + s2.get('Com_rollback', 0)
+            trx1 = s1.get('Com_commit', 0) + s1.get('Com_rollback', 0)
+            tps_diff = max(0, trx2 - trx1)
+            qps = round(queries_diff / dt, 2)
+            tps = round(tps_diff / dt, 2)
+            return {
+                'qps': qps,
+                'tps': tps,
+                'queries_total': s2.get('Queries', 0),
+                'transactions_total': trx2
+            }
+        except Exception as e:
+            logger.info(f"窗口采样失败: {e}")
+            return {'qps': None, 'tps': None, 'error': str(e)}
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
     #从performance_schema获取性能指标
     def get_performance_schema_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
@@ -117,19 +188,20 @@ class DirectMySQLMetricsService:
         try:
             # 检查performance_schema是否启用
             check_ps_query = "SELECT @@performance_schema"
-            result = self._execute_query(conn, check_ps_query)
+            result = self.execute_query(conn, check_ps_query)
             
             # 简化判断：如果查询失败或结果不是1，说明未启用
             if not result or result['rows'][0][0] != 1:
-                logger.info(f"{result['rows']}")
+                logger.info(f"performance_schema 检查结果: {result['rows'] if (result and 'rows' in result) else 'Unavailable'}")
                 return {
                     'p95_latency_ms': None,
                     'avg_response_time_ms': None,
                     'error': 'performance_schema未启用'
                 }
                      
+                     
             # 性能统计信息
-            #获取最近 5 分钟内最慢的 100 条SQL 模板及其平均延迟和执行次数
+            #
             perf_query = """
             SELECT 
                 ROUND(AVG(avg_timer_wait) / 1000000, 2) as avg_response_time_ms,
@@ -137,15 +209,15 @@ class DirectMySQLMetricsService:
                 SUM(count_star) as total_executions
             FROM performance_schema.events_statements_summary_by_digest 
             WHERE last_seen > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
-            AND avg_timer_wait > 0
+            AND avg_timer_wait > 0  
             """
             
-            result = self._execute_query(conn, perf_query)
+            result = self.execute_query(conn, perf_query)
             if not result or not result['rows']:
                 return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': '性能数据不足'}
             '''查看数据'''
             logger.info(f"Performance 查询返回{result['rows']}")
-            avg_response_time_ms = result['rows'][0][0]
+            # avg_response_time_ms = result['rows'][0][0]
             
             # 尝试获取P95延迟（使用MySQL兼容的方法）
             # 由于MySQL不支持PERCENTILE_CONT，使用近似计算方法
@@ -160,7 +232,7 @@ class DirectMySQLMetricsService:
             LIMIT 100
             """
             
-            p95_result = self._execute_query(conn, p95_query)
+            p95_result = self.execute_query(conn, p95_query)
             '''查看数据'''
             logger.info(f"Performance P95 查询返回{p95_result}")
             p95_latency_ms = None
@@ -206,10 +278,11 @@ class DirectMySQLMetricsService:
                 'Slow_queries', 'Queries'
             )
             """            
-            result = self._execute_query(conn, slow_query_query)
+            result = self.execute_query(conn, slow_query_query)
 
             '''查看数据'''
             logger.info(f"慢查询查询返回{result}")
+            
 
             if not result:
                 return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': '慢查询统计获取失败'}
@@ -252,12 +325,12 @@ class DirectMySQLMetricsService:
                 'Handler_read_rnd_next'
             )
             """        
-            result = self._execute_query(conn, index_query)
+            result = self.execute_query(conn, index_query)
             if not result:
                 return {'index_usage_rate': None, 'error': '索引统计获取失败'}
             
             status_vars = {}
-            for row in result['row']:
+            for row in result['rows']:
                 var_name = row[0]
                 var_value = row[1]
                 if var_value.isdigit():
@@ -316,7 +389,7 @@ class DirectMySQLMetricsService:
             )
             """
             
-            result = self._execute_query(conn, status_query)
+            result = self.execute_query(conn, status_query)
             if not result:
                 return {'threads_connected': None, 'threads_running': None, 'error': '状态查询失败'}
             
@@ -349,7 +422,7 @@ class DirectMySQLMetricsService:
                 FROM information_schema.innodb_metrics
                 WHERE name='lock_deadlocks' AND status='enabled'
                 """
-                deadlock_result = self._execute_query(conn, deadlock_query)
+                deadlock_result = self.execute_query(conn, deadlock_query)
                 if deadlock_result and deadlock_result['rows']:
                     deadlocks = int(deadlock_result['rows'][0][0] or 0)
             except Exception:
@@ -364,7 +437,7 @@ class DirectMySQLMetricsService:
                     'Innodb_redo_log_write_time','Innodb_redo_log_writes'
                 )
                 """
-                sres = self._execute_query(conn, status_redo_query)
+                sres = self.execute_query(conn, status_redo_query)
                 if sres and sres['rows']:
                     kv = {row[0]: float(row[1] or 0) for row in sres['rows']}
                     writes = kv.get('Innodb_redo_log_writes', 0.0)
@@ -381,7 +454,7 @@ class DirectMySQLMetricsService:
                     SELECT name, `count` FROM information_schema.innodb_metrics
                     WHERE status='enabled' AND name IN ('log_write_time','log_writes')
                     """
-                    redo_result = self._execute_query(conn, redo_query)
+                    redo_result = self.execute_query(conn, redo_query)
                     if redo_result and redo_result['rows']:
                         kv = {r[0]: float(r[1] or 0) for r in redo_result['rows']}
                         writes = kv.get('log_writes', 0.0)
@@ -398,7 +471,7 @@ class DirectMySQLMetricsService:
                     SELECT name, `count` FROM information_schema.innodb_metrics
                     WHERE status='enabled' AND name IN ('log_flush_total_time','log_writes')
                     """
-                    fres = self._execute_query(conn, flush_query)
+                    fres = self.execute_query(conn, flush_query)
                     if fres and fres['rows']:
                         kv = {r[0]: float(r[1] or 0) for r in fres['rows']}
                         writes = kv.get('log_writes', 0.0)

@@ -212,9 +212,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue';
 import { message } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
+import globalInstances from '../utils/globalInstances';
 
 const loading = ref(false);
 const loadingDatabases = ref(false);
@@ -239,16 +240,33 @@ function pretty(obj) {
 
 async function getInstanceList() {
   try {
-    const data = await apiClient.getInstances();
-    const list = Array.isArray(data) ? data : (Array.isArray(data?.instances) ? data.instances : []);
-    instanceOptions.value = list.filter(i => i.status === 'running').map(i => ({
+    await globalInstances.ensureInstancesLoaded();
+    const runningInstances = globalInstances.getRunningInstances();
+    instanceOptions.value = runningInstances.map(i => ({
       value: String(i.id),
       label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
     }));
   } catch (e) {
+    console.error('SQLConsole: 获取实例列表失败:', e);
     instanceOptions.value = [];
   }
 }
+
+// 监听全局缓存清理事件，清空本地选项并刷新
+function handleInstancesCacheCleared() {
+  instanceOptions.value = [];
+  getInstanceList();
+}
+window.addEventListener('instances-cache-cleared', handleInstancesCacheCleared);
+
+onUnmounted(() => {
+  window.removeEventListener('instances-cache-cleared', handleInstancesCacheCleared);
+});
+
+onMounted(() => {
+  getInstanceList();
+  loadHistoryFromLocal(); // 加载历史记录
+});
 
 async function getDatabaseList(instanceId) {
   if (!instanceId) return;
@@ -879,7 +897,7 @@ function clearHistory() {
   overflow: auto;
 }
 
-.result-table :deep(.ant-table-tbody > tr > td) {
+.table-result :deep(.ant-table-tbody > tr > td) {
   padding: 8px 12px;
   font-size: 13px;
 }

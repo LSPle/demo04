@@ -29,6 +29,11 @@ def validate_instance_data(data, is_update=False):
     if not data:
         return False, '请求体不能为空'
     
+    # 统一清洗：去除常见字段的前后空格
+    for key in ['name', 'host', 'type', 'username', 'password']:
+        if key in data and isinstance(data[key], str):
+            data[key] = data[key].strip()
+    
     # 检查必需字段（仅在创建时）
     if not is_update:
         required_fields = ['name', 'host', 'port', 'type']
@@ -62,14 +67,6 @@ def validate_instance_data(data, is_update=False):
     
     return True, '验证通过'
 
-# 检查实例名是否重复
-# def check_instance_name_exists(name, user_id, exclude_id=None):
-#     """检查实例名是否已存在"""
-#     query = get_user_instances_query(user_id).filter_by(instance_name=name)
-#     if exclude_id:
-#         query = query.filter(Instance.id != exclude_id)
-#     return query.first() is not None
-
 """获取实例列表"""
 @instances_bp.get('/instances')
 def list_instances():
@@ -89,16 +86,17 @@ def create_instance():
  
     try:
         data = request.get_json()
+        # 基础清洗：去除用户名/密码/主机/名称的空格
+        for key in ['username', 'password', 'host', 'name', 'type']:
+            if key in data and isinstance(data[key], str):
+                data[key] = data[key].strip()
+        
         user_id = request.args.get('userId')
         
         # 验证数据
         is_valid, error_msg = validate_instance_data(data)
         if not is_valid:
             return jsonify({'error': error_msg}), 400
-        
-        # 检查实例名是否重复
-        # if check_instance_name_exists(data['name'], user_id):
-        #     return jsonify({'error': '实例名称已存在'}), 400
         
         # 验证数据库连接
         is_ok, msg = db_connection_manager.validate_connection(
@@ -119,7 +117,6 @@ def create_instance():
             username=data.get('username', ''),
             password=data.get('password', ''),
             db_type=data['type'],
-            status=data.get('status', 'running'),
             user_id=user_id,
             add_time=datetime.utcnow()
         )
@@ -143,6 +140,10 @@ def update_instance(instance_id):
     try:
         user_id = request.args.get('userId')
         data = request.get_json()
+        # 基础清洗：去除用户名/密码/主机/名称的空格
+        for key in ['username', 'password', 'host', 'name', 'type']:
+            if key in data and isinstance(data[key], str):
+                data[key] = data[key].strip()
         
         # 查找实例
         instance = get_user_instances_query(user_id).filter_by(id=instance_id).first()
@@ -153,11 +154,6 @@ def update_instance(instance_id):
         is_valid, error_msg = validate_instance_data(data, is_update=True)
         if not is_valid:
             return jsonify({'error': error_msg}), 400
-        
-        # 检查实例名是否重复（排除当前实例）
-        if 'name' in data and data['name'] != instance.instance_name:
-            if check_instance_name_exists(data['name'], user_id, instance_id):
-                return jsonify({'error': '实例名称已存在'}), 400
         
         # 如果更新了连接信息，验证连接
         connection_fields = ['host', 'port', 'username', 'password', 'type']
@@ -172,7 +168,7 @@ def update_instance(instance_id):
             if not is_ok:
                 return jsonify({'error': f'连接校验失败：{msg}'}), 400
         
-        # 更新实例信息
+        # 更新实例信息（不再接受/写入status字段）
         if 'name' in data:
             instance.instance_name = data['name']
         if 'host' in data:
@@ -185,8 +181,9 @@ def update_instance(instance_id):
             instance.password = data['password']
         if 'type' in data:
             instance.db_type = data['type']
+        # 显式忽略任何传入的 status
         if 'status' in data:
-            instance.status = data['status']
+            pass
         
         db.session.commit()
         

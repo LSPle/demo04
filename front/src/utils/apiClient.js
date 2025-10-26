@@ -20,7 +20,6 @@ class ApiClient {
 
   appendUserId(url) {
     const uid = this.getUserId();
-    // console.log('appendUserId', uid);   
     if (!uid) return url;
     return url.includes('?') ? `${url}&userId=${encodeURIComponent(uid)}` : `${url}?userId=${encodeURIComponent(uid)}`;
   }
@@ -79,183 +78,127 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const defaultOptions = {
-      method: 'GET',
-      headers,
-      timeout: this.defaultTimeout,
-      ...options
-    };
+    const controller = new AbortController();
+    const timeout = options.timeout || this.defaultTimeout;
+    const id = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), defaultOptions.timeout);
-      
-      const response = await fetch(url, {
-        ...defaultOptions,
+      const resp = await fetch(url, {
+        ...options,
+        headers,
         signal: controller.signal
       });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: '请求失败' }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+      clearTimeout(id);
+
+      if (!resp.ok) {
+        const text = await resp.text();
+        if (showError) message.error(text || `请求失败: ${resp.status}`);
+        throw new Error(text || `Request failed: ${resp.status}`);
       }
-      
-      return await response.json();
+
+      const ct = resp.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        return await resp.json();
+      } else {
+        return await resp.text();
+      }
     } catch (error) {
-      if (showError) {
-        if (error.name === 'AbortError') {
-          message.error('请求超时，请检查网络连接');
-        } else {
-          message.error(error.message || '请求失败，请检查后端服务');
-        }
+      if (error.name === 'AbortError') {
+        if (showError) message.error('请求超时');
+      } else if (showError) {
+        message.error(error.message || '请求失败');
       }
       throw error;
     }
   }
 
-  /**
-   * GET请求
-   */
   async get(url, showError = true) {
     return this.request(url, { method: 'GET' }, showError);
   }
 
-  /**
-   * POST请求
-   */
   async post(url, data, showError = true, options = {}) {
-    return this.request(url, {
-      method: 'POST',
-      body: JSON.stringify(data),
-      ...options,
-    }, showError);
+    return this.request(url, { method: 'POST', body: JSON.stringify(data), ...options }, showError);
   }
 
-  /**
-   * PUT请求
-   */
   async put(url, data, showError = true) {
-    return this.request(url, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    }, showError);
+    return this.request(url, { method: 'PUT', body: JSON.stringify(data) }, showError);
   }
 
-  /**
-   * DELETE请求
-   */
   async delete(url, showError = true) {
     return this.request(url, { method: 'DELETE' }, showError);
   }
 
-  /**
-   * 用户登录
-   */
   async login(username, password) {
-    return this.post(API_ENDPOINTS.AUTH_LOGIN, { username, password }, true);
+    const data = await this.post(API_ENDPOINTS.AUTH_LOGIN, { username, password });
+    if (data && data.access_token && data.user) {
+      this.setToken(data.access_token);
+      try { localStorage.setItem('userId', String(data.user.id)); } catch {}
+    }
+    return data;
   }
 
-  /**
-   * 用户注册
-   */
   async register(username, password) {
-    return this.post(API_ENDPOINTS.AUTH_REGISTER, { username, password }, true);
+    return this.post(API_ENDPOINTS.AUTH_REGISTER, { username, password });
   }
 
-  /**
-   * 用户登出
-   */
   async logout() {
-    return this.post(API_ENDPOINTS.AUTH_LOGOUT, {}, true);
+    try { await this.post(API_ENDPOINTS.AUTH_LOGOUT, {}); } catch {}
+    this.clearToken();
   }
 
-  /**
-   * 获取当前用户信息
-   */
   async getCurrentUser() {
-    return this.get(API_ENDPOINTS.AUTH_ME, true);
+    return this.get(API_ENDPOINTS.AUTH_ME);
   }
 
-  /**
-   * 获取实例列表
-   */
   async getInstances() {
     return this.get(this.appendUserId(API_ENDPOINTS.INSTANCES));
   }
 
-  /**
-   * 获取实例详情
-   */
   async getInstance(id) {
     return this.get(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)));
   }
 
-  /**
-   * 创建实例
-   */
   async createInstance(data) {
     return this.post(this.appendUserId(API_ENDPOINTS.INSTANCES), data);
   }
 
-  /**
-   * 更新实例
-   */
   async updateInstance(id, data) {
     return this.put(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)), data);
   }
 
-  /**
-   * 删除实例
-   */
   async deleteInstance(id) {
     return this.delete(this.appendUserId(API_ENDPOINTS.INSTANCE_DETAIL(id)));
   }
 
-  /**
-   * 获取实例数据库列表
-   */
   async getInstanceDatabases(id) {
     return this.get(this.appendUserId(API_ENDPOINTS.INSTANCE_DATABASES(id)));
   }
 
-  /**
-   * 获取数据库表列表
-   */
   async getDatabaseTables(instanceId, database) {
     return this.get(this.appendUserId(API_ENDPOINTS.DATABASE_TABLES(instanceId, database)));
   }
 
-  /**
-   * 获取表结构
-   */
   async getTableSchema(instanceId, database, table) {
     return this.get(this.appendUserId(API_ENDPOINTS.TABLE_SCHEMA(instanceId, database, table)));
   }
 
-  /**
-   * SQL分析
-   */
   async analyzeSql(data) {
-    // 统一 DeepSeek 相关请求超时为 300 秒
     return this.post(this.appendUserId(API_ENDPOINTS.SQL_ANALYZE), data, true, { timeout: 300000 });
   }
 
-  /**
-   * 执行 SQL（仅 MySQL）
-   */
   async executeSql(data) {
     return this.post(this.appendUserId(API_ENDPOINTS.SQL_EXECUTE), data);
   }
 
-
-
   /**
    * 架构分析
    */
-  async analyzeArchitecture(instanceId) {
-    return this.post(this.appendUserId(API_ENDPOINTS.ARCH_ANALYZE(instanceId)), {}, true, { timeout: 300000 });
+  async analyzeArchitecture(instanceId, windowSeconds = 6) {
+    const baseUrl = API_ENDPOINTS.ARCH_ANALYZE(instanceId);
+    // 先添加window_s参数，再添加userId
+    const urlWithWindow = `${baseUrl}?window_s=${windowSeconds}`;
+    const finalUrl = this.appendUserId(urlWithWindow);
+    return this.post(finalUrl, {}, true, { timeout: 300000 });
   }
 
   /**
@@ -293,9 +236,15 @@ class ApiClient {
 
   /**
    * 获取配置优化摘要（新路径 /config）
+   * 强制窗口采样，默认6秒
    */
-  async getConfigSummary(instanceId) {
-    return this.get(this.appendUserId(API_ENDPOINTS.CONFIG_SUMMARY(instanceId)));
+  async getConfigSummary(instanceId, windowSeconds = 6) {
+    const base = API_ENDPOINTS.CONFIG_SUMMARY(instanceId);
+    const n = parseInt(windowSeconds, 10);
+    const win = Number.isNaN(n) || n <= 0 ? 6 : Math.max(1, n);
+    const qs = new URLSearchParams({ window_s: String(win) }).toString();
+    const url = `${base}?${qs}`;
+    return this.get(this.appendUserId(url));
   }
 
   /**

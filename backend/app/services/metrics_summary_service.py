@@ -60,13 +60,6 @@ class MetricsSummaryService:
                 'redo_write_latency_ms': None,  # 平均写延迟（ms）
                 'slowest_query_ms': None,
             },
-            # 兼容保留：之前作为占位标记的 unsupported 字段
-            'unsupported': {
-                'qps': 'unsupported',
-                'tps': 'unsupported',
-                'p95_latency_ms': 'unsupported',
-                'io_latency_ms': 'unsupported'
-            },
             'generated_at': int(time.time())
         }
 
@@ -135,6 +128,36 @@ class MetricsSummaryService:
         else:
             summary['slowlog']['note'] = msg or '慢日志查询失败'
 
+        return summary
+
+    # 新增：支持在一次接口内进行窗口二次采样（简化版，委托服务层）
+    def get_summary_with_window(self, inst: Instance, window_s: int = 6):
+        summary = self.get_summary(inst)
+        try:
+            sleep_seconds = max(1, int(window_s))
+        except Exception:
+            sleep_seconds = 6
+        
+        # 强制执行窗口采样，失败时抛出异常
+        qps_tps = direct_mysql_metrics_service.get_qps_tps_window(inst, sleep_seconds)
+        if isinstance(qps_tps, dict):
+            # 检查是否有错误信息
+            if qps_tps.get('error'):
+                raise Exception(f"窗口采样失败：{qps_tps.get('error')}")
+            
+            # 检查是否获取到有效的QPS/TPS数据
+            if qps_tps.get('qps') is None and qps_tps.get('tps') is None:
+                raise Exception("窗口采样失败：未获取到有效的QPS/TPS数据")
+            
+            if qps_tps.get('qps') is not None:
+                summary['perf']['qps'] = qps_tps.get('qps')
+            if qps_tps.get('tps') is not None:
+                summary['perf']['tps'] = qps_tps.get('tps')
+            if qps_tps.get('transactions_total') is not None:
+                summary['mysql']['transactions_total'] = qps_tps.get('transactions_total')
+        else:
+            raise Exception("窗口采样失败：无法获取QPS/TPS数据")
+        
         return summary
 
 

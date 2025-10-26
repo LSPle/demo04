@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 from ..models import Instance
 from ..services.metrics_summary_service import metrics_summary_service
-from ..services.direct_mysql_metrics_service import direct_mysql_metrics_service
 from ..services.performance_score_service import compute_scores as compute_performance_scores
 
 
@@ -47,9 +46,18 @@ def analyze_architecture(instance_id: int):
         return jsonify({'error': '实例不存在'}), 404
 
     try:
-        # 2) 采集指标（复用已有服务）
-        summary: Dict[str, Any] = metrics_summary_service.get_summary(inst)
-        direct: Dict[str, Any] = direct_mysql_metrics_service.get_all_direct_metrics(inst)
+        # 2) 采集指标（强制使用窗口采样，确保数据准确性）
+        # 读取窗口参数，默认6秒
+        window_s = request.args.get('window_s')
+        window_int = 6  # 默认6秒窗口
+        try:
+            if window_s is not None:
+                window_int = max(1, int(window_s))
+        except Exception:
+            window_int = 6
+
+        # 强制使用窗口采样，确保QPS/TPS数据准确性
+        summary: Dict[str, Any] = metrics_summary_service.get_summary_with_window(inst, window_int)
 
         # 3) 组装前端需要的性能数据结构（尽量贴近前端字段）
         system = summary.get('system', {})
@@ -73,7 +81,7 @@ def analyze_architecture(instance_id: int):
             'currentConnections': int(_num(mysql.get('threads_connected'), 0)),
             'maxConnections': int(_num(mysql.get('max_connections'), 1000)),
             'peakConnections': int(_num(mysql.get('peak_connections'), _num(mysql.get('threads_connected'), 0))),
-            'transactionCount': int(_num(direct.get('transactions_total', mysql.get('transactions_total')), 0)),
+            'transactionCount': int(_num(mysql.get('transactions_total'), 0)),
 
             # 锁和并发控制
             'lockWaits': int(_num(mysql.get('innodb_row_lock_waits'), 0)),
@@ -84,11 +92,11 @@ def analyze_architecture(instance_id: int):
             'sharedBufferHitRate': _num(mysql.get('cache_hit_rate'), 0),  # 共享缓冲命中率暂无，复用同值
 
             # 查询性能
-            'qps': _num(perf.get('qps', direct.get('qps')), 0),
-            'slowQueryEnabled': direct.get('slow_query_ratio') is not None,
+            'qps': _num(perf.get('qps'), 0),
+            'slowQueryEnabled': mysql.get('slow_query_ratio') is not None,
             'slowestQuery': _num(perf.get('slowest_query_ms'), 0),
-            'slowQueryRatio': _num(mysql.get('slow_query_ratio', direct.get('slow_query_ratio')), 0),
-            'avgQueryTime': _num(mysql.get('avg_response_time_ms', direct.get('avg_response_time_ms')), 0)
+            'slowQueryRatio': _num(mysql.get('slow_query_ratio'), 0),
+            'avgQueryTime': _num(mysql.get('avg_response_time_ms'), 0)
         }
 
         # 4) 计算分数（总分 + 分项分数）

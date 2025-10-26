@@ -334,9 +334,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { message, Empty } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
+import globalInstances from '../utils/globalInstances';
+
+let cacheClearedHandler = null;
 
 // 响应式数据
 const instanceLoading = ref(false);
@@ -360,18 +363,21 @@ function isNumber(value) {
   return typeof value === 'number' && !Number.isNaN(value);
 }
 
-// 加载实例列表
+// 使用全局状态管理加载运行中的实例
 async function loadInstances() {
   try {
     instanceLoading.value = true;
-    const data = await apiClient.getInstances();
-    const list = Array.isArray(data) ? data : (Array.isArray(data?.instances) ? data.instances : []);
-    instanceOptions.value = list
-      .filter(i => i.status === 'running')
-      .map(i => ({
-        value: String(i.id),
-        label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
-      }));
+    // 确保全局数据已加载
+    await globalInstances.ensureInstancesLoaded();
+    
+    // 获取运行中的实例
+    const runningInstances = globalInstances.getRunningInstances();
+    
+    // 格式化选项
+    instanceOptions.value = runningInstances.map(i => ({
+      value: String(i.id),
+      label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
+    }));
   } catch (error) {
     message.error('加载实例列表失败');
     instanceOptions.value = [];
@@ -390,8 +396,8 @@ async function loadData() {
   try {
     dataLoading.value = true;
 
-    // 从后端采集真实指标摘要
-    const summary = await apiClient.getConfigSummary(Number(selectedInstance.value));
+    // 从后端采集真实指标摘要（带 6 秒窗口二次采样）
+    const summary = await apiClient.getConfigSummary(Number(selectedInstance.value), 6);
     const sys = summary?.system || {};
     const mysql = summary?.mysql || {};
     const perf = summary?.perf || {};
@@ -552,6 +558,16 @@ function getScoreClass(score) {
 // 组件挂载时加载实例列表
 onMounted(() => {
   loadInstances();
+  cacheClearedHandler = () => {
+    instanceOptions.value = [];
+    loadInstances();
+  };
+  window.addEventListener('instances-cache-cleared', cacheClearedHandler);
+});
+onUnmounted(() => {
+  if (cacheClearedHandler) {
+    window.removeEventListener('instances-cache-cleared', cacheClearedHandler);
+  }
 });
 </script>
 

@@ -69,24 +69,14 @@ def login():
     # 生成token
     access_token = create_access_token(identity=user.user_id)
     
-    # 登录成功后启动监控
-    try:
-        from ..services.websocket_service import websocket_service
-        websocket_service.increment_active_sessions()
-    except:
-        pass  # 如果启动失败就忽略
+
     
     return jsonify({'access_token': access_token, 'user': user.to_public()}), 200
 
 
 @auth_bp.post('/logout')
 def logout():
-    # 退出登录时停止监控
-    try:
-        from ..services.websocket_service import websocket_service
-        websocket_service.decrement_active_sessions()
-    except:
-        pass  # 如果停止失败就忽略
+
     
     return jsonify({'message': 'logged out'}), 200
 

@@ -1,7 +1,7 @@
 from typing import Dict, Any
 
 """
-配置优化评分服务（大学生水平实现）
+配置优化评分服务
 
 用途：为“配置优化”页面或后端分析逻辑提供一个简单、可读、可解释的评分方法。
 输入：metrics_summary_service.get_summary(inst) 的返回结构（包含 system/mysql/perf 三类关键指标）。
@@ -14,7 +14,7 @@ from typing import Dict, Any
 """
 
 
-def _num(x: Any, default: float = 0.0) -> float:
+def to_num(x: Any, default: float = 0.0):
     """将任意输入安全转换为 float。缺失或异常返回默认值。"""
     try:
         if x is None:
@@ -24,25 +24,25 @@ def _num(x: Any, default: float = 0.0) -> float:
         return default
 
 
-def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
+def clamp_value(value: float, low: float = 0.0, high: float = 100.0):
     """限制到 [low, high] 范围。"""
     return max(low, min(high, value))
 
 
-def _pct(x: Any, default: float = 0.0) -> float:
+def to_percentage(x: Any, default: float = 0.0):
     """
     转换为 0~100 的百分比。
     - 若输入在 0~1 之间，视为比例并乘以 100。
     - 若输入在 0~100 之间，视为百分比直接使用。
     - 其他值做基本容错并截断到 0~100。
     """
-    n = _num(x, default)
+    n = to_num(x, default)
     if 0.0 <= n <= 1.0:
-        return _clamp(n * 100.0)
-    return _clamp(n)
+        return clamp_value(n * 100.0)
+    return clamp_value(n)
 
 
-def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
+def compute_scores(summary: Dict[str, Any]):
     """
     计算配置优化总分与分项分数。
 
@@ -62,10 +62,10 @@ def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
     perf = summary.get('perf', {})
 
     # 1) 系统评分：CPU/内存/磁盘占用越高越扣分；IO延迟作为轻量扣分项
-    cpu = _pct(sys.get('cpu_usage'), 0.0)
-    mem = _pct(sys.get('memory_usage'), 0.0)
-    disk = _pct(sys.get('disk_usage'), 0.0)
-    io_lat = _num(perf.get('io_latency_ms'), 0.0)
+    cpu = to_percentage(sys.get('cpu_usage'), 0.0)
+    mem = to_percentage(sys.get('memory_usage'), 0.0)
+    disk = to_percentage(sys.get('disk_usage'), 0.0)
+    io_lat = to_num(perf.get('io_latency_ms'), 0.0)
 
     # 线性扣分 + 阈值扣分（简单易懂）
     sys_penalty = 0.4 * cpu + 0.4 * mem + 0.2 * disk
@@ -75,19 +75,19 @@ def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
         sys_penalty += 8
     elif io_lat > 10:
         sys_penalty += 4
-    system_score = _clamp(100.0 - sys_penalty)
+    system_score = clamp_value(100.0 - sys_penalty)
 
     # 2) MySQL评分：连接压力、缓存命中、慢查询比例、平均响应、锁等待/死锁、索引使用率
-    threads = _num(mysql.get('threads_running'), 0.0)
-    max_conn = _num(mysql.get('max_connections'), 100.0)
+    threads = to_num(mysql.get('threads_running'), 0.0)
+    max_conn = to_num(mysql.get('max_connections'), 100.0)
     conn_ratio = threads / max_conn if max_conn > 0 else 0.0  # 0~1
 
-    hit = _pct(mysql.get('cache_hit_rate'), 0.0)
-    slow_ratio = _pct(mysql.get('slow_query_ratio'), 0.0)
-    avg_ms = _num(mysql.get('avg_response_time_ms'), 0.0)
-    lock_ms = _num(mysql.get('innodb_row_lock_time_ms'), 0.0)
-    deadlocks = _num(mysql.get('deadlocks'), 0.0)
-    index_rate = _pct(mysql.get('index_usage_rate'), 100.0)  # 缺失视为 100（不扣分）
+    hit = to_percentage(mysql.get('cache_hit_rate'), 0.0)
+    slow_ratio = to_percentage(mysql.get('slow_query_ratio'), 0.0)
+    avg_ms = to_num(mysql.get('avg_response_time_ms'), 0.0)
+    lock_ms = to_num(mysql.get('innodb_row_lock_time_ms'), 0.0)
+    deadlocks = to_num(mysql.get('deadlocks'), 0.0)
+    index_rate = to_percentage(mysql.get('index_usage_rate'), 100.0)  # 缺失视为 100（不扣分）
 
     mysql_score = 90.0
     # 连接压力：占满时扣至 ~65 分；空闲影响较小
@@ -129,13 +129,13 @@ def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
     else:
         mysql_score += 2
 
-    mysql_score = _clamp(mysql_score)
+    mysql_score = clamp_value(mysql_score)
 
     # 3) 性能评分：QPS/TPS（高略增分），P95/Redo 延迟（高扣分）
-    qps = _num(perf.get('qps'), 0.0)
-    tps = _num(perf.get('tps'), 0.0)
-    p95 = _num(perf.get('p95_latency_ms'), 0.0)
-    redo = _num(perf.get('redo_write_latency_ms'), 0.0)
+    qps = to_num(perf.get('qps'), 0.0)
+    tps = to_num(perf.get('tps'), 0.0)
+    p95 = to_num(perf.get('p95_latency_ms'), 0.0)
+    redo = to_num(perf.get('redo_write_latency_ms'), 0.0)
 
     performance_score = 85.0
     # P95 延迟
@@ -162,16 +162,16 @@ def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
     elif tps > 400:
         performance_score += 2
 
-    performance_score = _clamp(performance_score)
+    performance_score = clamp_value(performance_score)
 
     # 4) 安全/稳定评分（占比较小）：示例使用复制延迟（若无复制，默认良好）
-    repl_delay = _num(mysql.get('replication_delay_ms'), 0.0)
+    repl_delay = to_num(mysql.get('replication_delay_ms'), 0.0)
     security_score = 85.0
     if repl_delay > 5000:
         security_score -= 20
     elif repl_delay > 1000:
         security_score -= 10
-    security_score = _clamp(security_score)
+    security_score = clamp_value(security_score)
 
     # 5) 总分加权（可按业务调整）
     overall = (
@@ -182,7 +182,7 @@ def compute_scores(summary: Dict[str, Any]) -> Dict[str, int]:
     )
 
     return {
-        'overall': int(round(_clamp(overall))),
+        'overall': int(round(clamp_value(overall))),
         'system': int(round(system_score)),
         'mysql': int(round(mysql_score)),
         'performance': int(round(performance_score)),

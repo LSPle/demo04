@@ -185,8 +185,8 @@
             <a-descriptions-item label="主机地址">{{ instanceData.host }}</a-descriptions-item>
             <a-descriptions-item label="端口">{{ instanceData.port }}</a-descriptions-item>
             <a-descriptions-item label="状态">
-              <a-tag :color="getStatusColor(instanceData.status)">
-                {{ getStatusText(instanceData.status) }}
+              <a-tag :color="getStatusColorByOk(statusMap[selectedInstance])">
+                {{ getStatusTextByOk(statusMap[selectedInstance]) }}
               </a-tag>
             </a-descriptions-item>
             <a-descriptions-item label="慢查询开启状态">
@@ -330,10 +330,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { message } from 'ant-design-vue';
 import { Empty } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
+import globalInstances from '../utils/globalInstances';
+
+let cacheClearedHandler = null;
 
 // 响应式数据
 const instanceLoading = ref(false);
@@ -353,16 +356,24 @@ const performanceScore = ref({
 });
 const analysisResult = ref(null);
 
+// 状态映射（从全局状态获取）
+const statusMap = reactive({});
+
 // 空状态图片
 const emptyImage = Empty.PRESENTED_IMAGE_SIMPLE;
 
-// 加载实例列表
+// 使用全局状态管理加载运行中的实例
 async function loadInstances() {
   try {
     instanceLoading.value = true;
-    const data = await apiClient.getInstances();
-    const list = Array.isArray(data) ? data : (Array.isArray(data?.instances) ? data.instances : []);
-    instanceOptions.value = list.filter(i => i.status === 'running').map(i => ({
+    // 确保全局数据已加载
+    await globalInstances.ensureInstancesLoaded();
+    
+    // 获取运行中的实例
+    const runningInstances = globalInstances.getRunningInstances();
+    
+    // 格式化选项
+    instanceOptions.value = runningInstances.map(i => ({
       value: String(i.id),
       label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
     }));
@@ -373,6 +384,8 @@ async function loadInstances() {
     instanceLoading.value = false;
   }
 }
+
+
 
 // 获取数据
 async function loadData() {
@@ -428,6 +441,11 @@ async function loadData() {
       connection: parseInt(sc.connection ?? 0, 10) || 0,
       query: parseInt(sc.query ?? 0, 10) || 0
     };
+    
+    // 4) 从全局状态获取状态映射
+    const globalStatusMap = globalInstances.getStatusMap();
+    Object.keys(statusMap).forEach(k => delete statusMap[k]);
+    Object.assign(statusMap, globalStatusMap);
     
     dataLoaded.value = true;
     message.success('数据加载完成（后端采集与评分）');
@@ -508,6 +526,18 @@ function getStatusColor(status) {
   return colorMap[status] || 'default';
 }
 
+function getStatusColorByOk(ok) {
+  if (ok === true) return 'green';
+  if (ok === false) return 'red';
+  return 'default';
+}
+
+function getStatusTextByOk(ok) {
+  if (ok === true) return '运行中';
+  if (ok === false) return '异常';
+  return '未知';
+}
+
 function getStatusText(status) {
   const textMap = {
     'running': '运行中',
@@ -560,6 +590,17 @@ function getScoreDescription(score) {
 
 onMounted(() => {
   loadInstances();
+  cacheClearedHandler = () => {
+    instanceOptions.value = [];
+    loadInstances();
+  };
+  window.addEventListener('instances-cache-cleared', cacheClearedHandler);
+});
+
+onUnmounted(() => {
+  if (cacheClearedHandler) {
+    window.removeEventListener('instances-cache-cleared', cacheClearedHandler);
+  }
 });
 </script>
 

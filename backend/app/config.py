@@ -4,26 +4,26 @@ from urllib.parse import quote_plus
 
 load_dotenv()
 
-'''集中管理并加载后端应用'''
+'''集中管理并加载后端应用配置'''
 
 class Config:
-    # 简化：直接从.env读取，不提供默认值
+    # 简化：直接�?env读取，不提供默认�?
     SECRET_KEY = os.getenv("SECRET_KEY")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
     
     # 关闭SQLAlchemy的修改跟踪，节省性能
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    # MySQL数据库配置 - 直接从.env读取
+    # MySQL数据库配�?- 直接�?env读取
     MYSQL_USER = os.getenv("MYSQL_USER")
     MYSQL_PASSWORD = os.getenv("MYSQL_PASSWORD")
     MYSQL_HOST = os.getenv("MYSQL_HOST")
     MYSQL_PORT = os.getenv("MYSQL_PORT", "3306")
     MYSQL_NAME = os.getenv("MYSQL_NAME")
 
-    # 简化验证：只检查是否存在
+    # 简化验证：只检查是否存�?
     if not all([MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST, MYSQL_NAME]):
-        raise RuntimeError("请检查 .env 文件中的 MySQL 配置")
+        raise RuntimeError("请检�?.env 文件中的 MySQL 配置")
 
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+pymysql://{quote_plus(MYSQL_USER)}:{quote_plus(MYSQL_PASSWORD)}"
@@ -37,3 +37,4 @@ class Config:
     DEEPSEEK_TIMEOUT = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
     LLM_ENABLED = os.getenv("LLM_ENABLED", "true").lower() == "true"
     LLM_DEBUG = os.getenv("LLM_DEBUG", "false").lower() == "true"
+

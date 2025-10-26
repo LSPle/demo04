@@ -27,7 +27,6 @@ class Instance(db.Model):
     port = db.Column('instancePort', db.Integer, nullable=False, default=3306)
     user_id = db.Column('userId', db.String(255), nullable=False, index=True)
     add_time = db.Column('addTime', db.DateTime, nullable=False, default=datetime.utcnow)
-    status = db.Column('instanceStatus', db.String(32), nullable=False, default='running')
 
     def to_dict(self):
         return {
@@ -38,7 +37,6 @@ class Instance(db.Model):
             'username': self.username,
             'password': self.password,
             'dbType': self.db_type,
-            'status': self.status,
             'userId': self.user_id,
             'addTime': self.add_time.strftime('%Y-%m-%d %H:%M:%S') if self.add_time else None,
             # 兼容前端字段名：创建时间

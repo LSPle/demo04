@@ -601,12 +601,6 @@ body {
   font-weight: 500;
 }
 
-.status-running {
-  background: #f6ffed;
-  color: #52c41a;
-  border: 1px solid #b7eb8f;
-}
-
 .status-warning {
   background: #fffbe6;
   color: #faad14;
@@ -1495,3 +1489,14 @@ body {
 .dark-theme .metric-tile.ok { border-color: rgba(82, 196, 26, 0.5); }
 .dark-theme .metric-tile.warn { border-color: rgba(250, 173, 20, 0.55); }
 .dark-theme .metric-tile.bad { border-color: rgba(255, 77, 79, 0.6); }
+
+/* 通用按钮点击动画（与实例管理一致） */
+.btn-click-anim {
+  will-change: transform, opacity;
+  transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-click-anim:active {
+  transform: scale(0.96);
+  opacity: 0.85;
+}

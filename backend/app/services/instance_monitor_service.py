@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import pymysql  #实现mysql连接、执行sql查询、关闭连接
 from ..models import Instance
-from .. import db
+from flask import has_app_context
 '''
     实例监控服务(核心)：检测单个实例，检测所有实例，更新实例状态，获取状态汇总
 '''
@@ -14,19 +14,21 @@ logger = logging.getLogger(__name__)
 
 
 class InstanceMonitorService:
-    """简化版实例监控服务"""
+    """简化版实例监控服务 - 直接状态更新，适合学生项目"""
 
     def __init__(self):
         self.max_workers = 5
-        self.retry_count = 2  # 减少重试次数
-        self.timeout = 30  # 增加超时时间到30秒
-        self.failure_threshold = 5  # 增加失败阈值到5次
-        self.failure_counts = {}  # 失败计数器
-        self.failure_threshold = 3  # 连续失败3次才标记异常
-        self.success_threshold = 2  # 新增：成功阈值2次
+        self.retry_count = 1  # 简化为1次重试，快速响应
+        self.timeout = 3  # 连接超时3秒，更快响应
+        # 移除所有复杂的计数器和阈值机制
+        self.app = None
+
+    def set_app(self, app):
+        """注入 Flask 应用实例，用于在无上下文的线程中创建上下文"""
+        self.app = app
 
     def check_instance_connection(self, instance):
-        """检查实例连接状态"""
+        """检查实例连接状态（旧：接收 ORM 对象）"""
         if not instance:
             return False, "实例不存在"
         
@@ -47,8 +49,8 @@ class InstanceMonitorService:
                 conn = pymysql.connect(
                     host=instance.host,
                     port=instance.port,
-                    user=instance.username or '',
-                    password=instance.password or '',
+                    user=(instance.username or '').strip(),
+                    password=(instance.password or '').strip(),
                     connect_timeout=self.timeout,
                     autocommit=True
                 )
@@ -60,118 +62,127 @@ class InstanceMonitorService:
                 
                 conn.close()
                 
-              
-
-                
-                # 连接成功，重置失败计数
-                if instance.id in self.failure_counts:
-                    del self.failure_counts[instance.id]
-                
+                # 连接成功
                 return True, "连接正常"
                 
             except Exception as e:
-                if attempt == self.retry_count:  # 最后一次重试
-                    return False, f"连接失败: {str(e)}"
+                logger.warning(f"实例 {instance.instance_name} 第{attempt+1}次连接失败: {e}")
+                # 继续重试
+                continue
         
         return False, "连接失败"
 
-    #不太明白
-    def update_instance_status(self, instance: Instance, is_connected: bool, message: str = ""):
-        """更新实例状态 - 状态平滑机制"""
-        try:
-            if is_connected:
-                # 连接正常
-                if instance.id in self.failure_counts:
-                    del self.failure_counts[instance.id]
-                
-                if instance.status != 'running':
-                    instance.status = 'running'
-                    logger.info(f"实例 {instance.instance_name} 状态更新为: running")
-            else:
-                # 连接失败，累计失败次数
-                if instance.id not in self.failure_counts:
-                    self.failure_counts[instance.id] = 0
-                
-                self.failure_counts[instance.id] += 1
-                
-                # 连续失败2次才标记为error
-                if self.failure_counts[instance.id] >= self.failure_threshold:
-                    if instance.status != 'error':
-                        instance.status = 'error'
-                        logger.info(f"实例 {instance.instance_name} 连续失败{self.failure_counts[instance.id]}次，状态更新为: error")
-            
-            db.session.commit()
-            return True
-            
-        except Exception as e:
-            logger.error(f"更新实例状态失败: {e}")
-            db.session.rollback()
-            return False
+    # 新增：按信息字典检测，避免跨线程传递 ORM 实例
+    def check_instance_connection_info(self, info: dict):
+        """使用简单字典进行连接检测（大学生水平：结构清晰、易读）"""
+        if not info:
+            return False, "实例信息缺失"
+        if (info.get('db_type') or '').strip() != 'MySQL':
+            return True, "非MySQL实例，跳过检测"
+        if not pymysql:
+            return False, "MySQL驱动不可用"
+        
+        host = info.get('host')
+        port = int(info.get('port') or 3306)
+        username = (info.get('username') or '').strip()
+        password = (info.get('password') or '').strip()
+        name = info.get('instance_name') or str(info.get('id'))
+        
+        for attempt in range(self.retry_count + 1):
+            if attempt > 0:
+                time.sleep(1)
+            try:
+                conn = pymysql.connect(
+                    host=host,
+                    port=port,
+                    user=username,
+                    password=password,
+                    connect_timeout=self.timeout,
+                    autocommit=True
+                )
+                with conn.cursor() as cursor:
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                conn.close()
+                return True, "连接正常"
+            except Exception as e:
+                logger.warning(f"实例 {name} 第{attempt+1}次连接失败: {e}")
+                continue
+        return False, "连接失败"
+
+    # 已移除持久化状态更新函数，系统不再写入数据库状态。
 
     def check_all_instances(self):
-        """并发检测所有实例"""
+        """并发检测所有实例（只检测不落库，返回逐实例状态）"""
         try:
-            instances = Instance.query.all()
+            # 查询实例列表
+            if has_app_context():
+                instances = Instance.query.all()
+            elif self.app is not None:
+                with self.app.app_context():
+                    instances = Instance.query.all()
+            else:
+                logger.error("查询实例失败：无应用上下文且未注入app")
+                return 0, 0, 0, []
+
             if not instances:
-                return 0, 0, 0
-            
+                return 0, 0, 0, []
+
             total_count = len(instances)
             normal_count = 0
             error_count = 0
-            
-            # 并发检测
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                future_to_instance = {
-                    executor.submit(self.check_instance_connection, instance): instance
-                    for instance in instances
+            statuses = []
+
+            # 将 ORM 转为简单字典，避免跨线程传递 ORM
+            inst_infos = [
+                {
+                    'id': inst.id,
+                    'instance_name': inst.instance_name,
+                    'host': inst.host,
+                    'port': inst.port,
+                    'username': inst.username or '',
+                    'password': inst.password or '',
+                    'db_type': inst.db_type,
                 }
-                
-                for future in as_completed(future_to_instance):
-                    instance = future_to_instance[future]
+                for inst in instances
+            ]
+
+            # 并发检测（传入字典）
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                future_to_info = {
+                    executor.submit(self.check_instance_connection_info, info): info
+                    for info in inst_infos
+                }
+
+                for future in as_completed(future_to_info):
+                    info = future_to_info[future]
                     try:
-                        is_connected, message = future.result()
-                        self.update_instance_status(instance, is_connected, message)
-                        
+                        is_connected, _msg = future.result()
+                        # 收集动态状态
+                        statuses.append({'id': int(info['id']), 'ok': bool(is_connected)})
                         if is_connected:
                             normal_count += 1
                         else:
                             error_count += 1
-                            
                     except Exception as e:
-                        logger.error(f"检测实例 {instance.id} 时出错: {e}")
-                        self.update_instance_status(instance, False, f"检测异常: {str(e)}")
+                        logger.error(f"检测实例 {info.get('id')} 时出错: {e}")
+                        statuses.append({'id': int(info['id']), 'ok': False})
                         error_count += 1
-            
-            logger.info(f"实例检测完成: 总数={total_count}, 正常={normal_count}, 异常={error_count}")
-            return total_count, normal_count, error_count
-            
+
+            return total_count, normal_count, error_count, statuses
+
         except Exception as e:
-            logger.error(f"批量检测实例状态失败: {e}")
-            return 0, 0, 0
+            logger.error(f"并发检测所有实例失败: {e}")
+            return 0, 0, 0, []
 
     def get_instance_status_summary(self):
-        """获取实例状态汇总"""
+        """基于实时检测结果的汇总（不读取数据库列）"""
         try:
-            instances = Instance.query.all()
-            status_counts = {
-                'running': 0,
-                'warning': 0,
-                'error': 0,
-                'total': len(instances)
-            }
-            
-            for instance in instances:
-                status = instance.status or 'error'
-                if status in status_counts:
-                    status_counts[status] += 1
-                else:
-                    status_counts['error'] += 1
-            
-            return status_counts
-            
+            total, normal, error, _ = self.check_all_instances()
+            return {'running': normal, 'error': error, 'total': total}
         except Exception as e:
             logger.error(f"获取实例状态汇总失败: {e}")
-            return {'running': 0, 'warning': 0, 'error': 0, 'total': 0}
+            return {'running': 0, 'error': 0, 'total': 0}
 
 
 # 全局实例

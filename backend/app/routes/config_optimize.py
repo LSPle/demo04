@@ -56,7 +56,7 @@ def build_general_config_summary():
 
 
 def build_instance_config_summary(instance_id: int):
-    """构建指定实例的指标摘要并计算评分"""
+    """构建指定实例的指标摘要并计算评分（强制窗口采样，默认6秒）"""
     try:
         # 按 userId 过滤实例归属
         user_id = request.args.get('userId')
@@ -67,7 +67,18 @@ def build_instance_config_summary(instance_id: int):
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
 
-        data = metrics_summary_service.get_summary(inst)
+        # 强制窗口采样：读取 window_s，默认6秒
+        window_s = request.args.get('window_s')
+        window_int = 6
+        try:
+            if window_s is not None:
+                window_int = max(1, int(window_s))
+        except Exception:
+            window_int = 6
+
+        # 始终执行窗口采样摘要
+        data = metrics_summary_service.get_summary_with_window(inst, window_int)
+
         # 增加配置优化评分计算
         try:
             score = compute_scores(data)

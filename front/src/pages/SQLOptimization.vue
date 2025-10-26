@@ -88,9 +88,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { message } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
+import globalInstances from '../utils/globalInstances';
 
 const selectedInstance = ref('');
 const selectedDatabase = ref('');
@@ -102,25 +103,23 @@ const instanceOptions = ref([]);
 const databaseOptions = ref([]);
 
 
+// 使用全局状态管理获取运行中的实例
 async function getInstanceList() {
   try {
-    const data = await apiClient.getInstances();
-    console.log('原始数据:', data);
+    // 确保全局数据已加载
+    await globalInstances.ensureInstancesLoaded();
     
-    let list = [];
-    if (Array.isArray(data)) {
-      list = data;
-    } else if (data && Array.isArray(data.instances)) {
-      list = data.instances;
-    }
+    // 获取运行中的实例
+    const runningInstances = globalInstances.getRunningInstances();
     
-    // 过滤运行中的实例并格式化选项
-    instanceOptions.value = list.filter(i => i.status === 'running').map(i => ({
+    // 格式化选项
+    instanceOptions.value = runningInstances.map(i => ({
       value: String(i.id),
       label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
     }));
   } catch (e) {
     instanceOptions.value = [];
+    message.error('获取实例列表失败');
   }
 }
 
@@ -173,6 +172,17 @@ function resetForm() {
   sqlQuery.value = '';
   optimizationResults.value = '';
 }
+
+// 监听全局缓存清理事件
+function handleInstancesCacheCleared() {
+  instanceOptions.value = [];
+  getInstanceList();
+}
+window.addEventListener('instances-cache-cleared', handleInstancesCacheCleared);
+
+onUnmounted(() => {
+  window.removeEventListener('instances-cache-cleared', handleInstancesCacheCleared);
+});
 
 onMounted(() => {
   getInstanceList();

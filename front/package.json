@@ -4,21 +4,20 @@
   "description": "数据库优化平台前端 (Vue3)",
   "type": "module",
   "scripts": {
-    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ..\\backend; if (Test-Path .\\.venv\\Scripts\\python.exe) { .\\.venv\\Scripts\\python.exe .\\run.py } elseif (Get-Command py -ErrorAction SilentlyContinue) { py -3 .\\run.py } else { python .\\run.py }\"",
+    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ..\\backend; $env:PORT=5002; if (Test-Path .\\.venv\\Scripts\\python.exe) { .\\.venv\\Scripts\\python.exe .\\run.py } elseif (Get-Command py -ErrorAction SilentlyContinue) { py -3 .\\run.py } else { python .\\run.py }\"",
     "frontend": "vite",
     "build": "vite build",
     "preview": "vite preview --port 3000",
     "dev": "npx concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm:backend\" \"npm:frontend\""
   },
   "dependencies": {
-    "vue": "^3.4.0",
-    "vue-router": "^4.3.0",
     "ant-design-vue": "^4.0.0",
-    "socket.io-client": "^4.7.2"
+    "vue": "^3.4.0",
+    "vue-router": "^4.3.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
-    "concurrently": "^9.2.1"
+    "concurrently": "^9.2.1",
+    "vite": "^5.0.0"
   }
 }
