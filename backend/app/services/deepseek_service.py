@@ -20,12 +20,23 @@ class DeepSeekClient:
         self._load_config()
 
     def _load_config(self):
-        # 直接使用环境变量，简单明了
-        self.base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-        self.api_key = os.getenv("DEEPSEEK_API_KEY")
-        self.model = os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
-        self.timeout = int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
-        self.enabled = os.getenv("LLM_ENABLED", "true").lower() != "false"
+        # 优先读取 Flask 应用配置，其次回退到环境变量（便于学生项目集中管理）
+        cfg = {}
+        try:
+            if has_app_context():
+                cfg = current_app.config or {}
+        except Exception:
+            cfg = {}
+
+        self.base_url = cfg.get("DEEPSEEK_BASE_URL") or os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        self.api_key = cfg.get("DEEPSEEK_API_KEY") or os.getenv("DEEPSEEK_API_KEY")
+        self.model = cfg.get("DEEPSEEK_MODEL") or os.getenv("DEEPSEEK_MODEL", "deepseek-reasoner")
+        timeout_cfg = cfg.get("DEEPSEEK_TIMEOUT")
+        self.timeout = int(timeout_cfg) if timeout_cfg is not None else int(os.getenv("DEEPSEEK_TIMEOUT", "300"))
+        if "LLM_ENABLED" in cfg:
+            self.enabled = bool(cfg.get("LLM_ENABLED"))
+        else:
+            self.enabled = os.getenv("LLM_ENABLED", "true").lower() != "false"
         #构造系统提示。仅支持 MySQL，直接返回分析内容
     def _build_prompt(self, sql: str, meta_summary: str):
         return (

@@ -1,5 +1,4 @@
-import os
-from flask import Flask, send_from_directory
+from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -45,25 +44,6 @@ def create_app():
     app.register_blueprint(monitor_bp, url_prefix='/api')
 
     app.register_blueprint(arch_opt_bp, url_prefix='/api')
-
-    # Serve React build files
-    build_dir = os.path.join(os.path.dirname(os.path.dirname(app.root_path)), 'build')
-    # Point Flask default static route to React build dir so /static/* works
-    app.static_folder = os.path.join(build_dir, 'static')
-    app.static_url_path = '/static'
-
-    @app.route('/')
-    def serve_react_app():
-        return send_from_directory(build_dir, 'index.html')
-
-    @app.route('/<path:filename>')
-    def serve_static_files(filename):
-        full_path = os.path.join(build_dir, filename)
-        if os.path.exists(full_path):
-            return send_from_directory(build_dir, filename)
-        #返回html让react自己处理
-        return send_from_directory(build_dir, 'index.html')
-
     # 根据models.py的模型初始化数据库
     with app.app_context():
         db.create_all()
@@ -76,4 +56,4 @@ def create_app():
     
     return app
 
-    # 暂时保留
+
