@@ -6,9 +6,10 @@ from flask_jwt_extended import JWTManager
 
 from .config import Config
 
-# Initialize extensions
+# 初始化扩展
 
 db = SQLAlchemy()
+#提供JWT的能力
 jwt = JWTManager()
 
 

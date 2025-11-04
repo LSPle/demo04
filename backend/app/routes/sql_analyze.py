@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 #创建蓝图
 sql_analyze_bp = Blueprint('sql_analyze', __name__)
 
+# 仅支持MySQL；执行轻量的表采样与EXPLAIN，连同SQL提交给LLM，返回分析与可选重写SQL
 @sql_analyze_bp.post('/sql/analyze')
 def analyze_sql():
-    """仅支持MySQL；执行轻量的表采样与EXPLAIN，连同SQL提交给LLM，返回分析与可选重写SQL。"""
     try:
         data = request.get_json()
         if not data:

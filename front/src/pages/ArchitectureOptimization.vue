@@ -303,27 +303,7 @@
     <!-- 分析结果卡片（动态添加） -->
     <div v-if="analysisResult" class="analysis-result-section">
       <a-card title="分析结果" class="analysis-result-card">
-        <a-descriptions title="总体建议" bordered :column="1" v-if="analysisResult.advice && analysisResult.advice.length">
-          <a-descriptions-item v-for="(adv, idx) in analysisResult.advice" :key="idx" :label="adv.type || '建议'">
-            {{ adv.message }}
-          </a-descriptions-item>
-        </a-descriptions>
-
-        <a-divider />
-
-        <a-list v-if="analysisResult.risks && analysisResult.risks.length" :data-source="analysisResult.risks" header="风险项" bordered>
-          <template #renderItem="{ item }">
-            <a-list-item>
-              <a-tag :color="item.severity === 'critical' ? 'red' : (item.severity === 'warning' ? 'orange' : 'blue')" style="margin-right:8px;">
-                {{ item.severity || 'info' }}
-              </a-tag>
-              <strong style="margin-right:8px;">{{ item.type }}</strong>
-              <span>{{ item.message }}</span>
-            </a-list-item>
-          </template>
-        </a-list>
-
-        <a-alert v-else message="暂无风险项" type="success" show-icon />
+        <!-- 空白内容 -->
       </a-card>
     </div>
   </div>

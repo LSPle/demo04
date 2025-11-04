@@ -17,17 +17,13 @@ instances_bp = Blueprint('instances', __name__)
 
 # 获取用户的实例查询对象
 def get_user_instances_query(user_id):
-    """根据用户ID获取实例查询对象"""
     query = Instance.query
     if user_id:
         query = query.filter_by(user_id=user_id)
     return query
 
-# 验证实例数据
+# 验证实例数据( is_update 用于区分实例更新还是创建实例)
 def validate_instance_data(data, is_update=False):
-    """验证实例数据的有效性"""
-    if not data:
-        return False, '请求体不能为空'
     
     # 统一清洗：去除常见字段的前后空格
     for key in ['name', 'host', 'type', 'username', 'password']:
@@ -41,44 +37,31 @@ def validate_instance_data(data, is_update=False):
             if field not in data or not data[field]:
                 return False, f'缺少必需字段: {field}'
     
-    # 验证实例名称
-    if 'name' in data:
-        if not isinstance(data['name'], str) or len(data['name'].strip()) == 0:
-            return False, '实例名称必须是非空字符串'
+    # 简单验证：检查字段是否为空
+    if 'name' in data and not data['name']:
+        return False, '实例名称不能为空'
     
-    # 验证主机地址
-    if 'host' in data:
-        if not isinstance(data['host'], str) or len(data['host'].strip()) == 0:
-            return False, '主机地址必须是非空字符串'
+    if 'host' in data and not data['host']:
+        return False, '主机地址不能为空'
     
-    # 验证端口号
     if 'port' in data:
-        try:
-            port = int(data['port'])
-            if port < 1 or port > 65535:
-                return False, '端口号必须在1-65535范围内'
-        except (ValueError, TypeError):
-            return False, '端口号必须是有效的整数'
-    
-    # 验证数据库类型
-    if 'type' in data:
-        if data['type'] not in ['MySQL']:
-            return False, '不支持的数据库类型'
+        port = int(data['port'])
+        if port <= 0:
+            return False, '端口号必须大于0'
     
     return True, '验证通过'
 
-"""获取实例列表"""
+# 获取实例列表
 @instances_bp.get('/instances')
 def list_instances():
     
     user_id = request.args.get('userId')
-    #获取实例
+    # 获取实例
     instances = get_user_instances_query(user_id).all()
-    # return jsonify([i.to_dict() for i in instances]), 200
-    instances_dicts = []
+    result = []
     for instance in instances:
-        instances_dicts.append(instance.to_dict())
-    return jsonify(instances_dicts), 200
+        result.append(instance.to_dict())
+    return jsonify(result), 200
 
 """创建新实例"""
 @instances_bp.post('/instances')
@@ -133,7 +116,7 @@ def create_instance():
         db.session.rollback()
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
-"""更新实例信息"""
+# 更新实例信息
 @instances_bp.put('/instances/<int:instance_id>')
 def update_instance(instance_id):
   
@@ -196,7 +179,7 @@ def update_instance(instance_id):
         db.session.rollback()
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
-"""删除实例"""
+# 删除实例
 @instances_bp.delete('/instances/<int:instance_id>')
 def delete_instance(instance_id):
     
@@ -220,9 +203,10 @@ def delete_instance(instance_id):
         db.session.rollback()
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
+
+# 获取单个实例信息(获取版本号)
 @instances_bp.get('/instances/<int:instance_id>')
 def get_instance(instance_id):
-    """获取单个实例信息"""
     try:
         user_id = request.args.get('userId')
         
@@ -252,11 +236,9 @@ def get_instance(instance_id):
                     row = cur.fetchone()
                     if row:
                         data['version'] = str(row[0])
-            finally:
-                try:
+            finally:           
                     conn.close()
-                except Exception:
-                    pass
+               
         except Exception:
             # 无法连接或无权限时不抛错，版本号置为未知
             data['version'] = data.get('version') or None
@@ -266,7 +248,7 @@ def get_instance(instance_id):
     except Exception as e:
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
-"""获取实例的数据库列表"""
+# 获取实例的数据库列表
 @instances_bp.get('/instances/<int:instance_id>/databases')
 def list_instance_databases(instance_id):
     
@@ -280,16 +262,16 @@ def list_instance_databases(instance_id):
         
         # 获取数据库列表
         ok, databases, msg = database_service.list_databases(instance)
-        if not ok:
-            status_code = 400 if msg in ['仅支持MySQL实例'] else 500
-            return jsonify({'error': msg}), status_code
+        # if not ok:
+        #     status_code = 400 if msg in ['仅支持MySQL实例'] else 500
+        #     return jsonify({'error': msg}), status_code
         
         return jsonify({'databases': databases}), 200
         
     except Exception as e:
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
-"""获取数据库的表列表"""
+# 获取数据库的表列表
 @instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables')
 def list_tables(instance_id, database):
     
@@ -342,8 +324,7 @@ def list_tables(instance_id, database):
     except Exception as e:
         return jsonify({'error': f'获取数据表失败: {str(e)}'}), 500
 
-"""获取数据库的表结构"""
-
+#获取数据库的表结构
 @instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables/<string:table_name>/schema')
 def get_table_schema(instance_id, database, table_name):
     

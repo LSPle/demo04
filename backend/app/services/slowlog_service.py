@@ -1,15 +1,13 @@
 import logging
-import re
 import datetime
 from typing import Any, Dict, List, Tuple, Optional
-
-try:
-    import pymysql
-except ImportError:
-    pymysql = None
-
-
+import pymysql
 from ..models import Instance
+
+# try:
+#     import pymysql
+# except ImportError:
+#     pymysql = None
 
 '''
   慢查询日志分析服务
@@ -17,13 +15,8 @@ from ..models import Instance
 logger = logging.getLogger(__name__)
 
 
-# 将时间值转换为秒数（简化版本）
-def _sec(val):
-    """
-    将时间值转换为秒数
-    参数: val - 可能是时间差对象、数字或None
-    返回: 浮点数秒数
-    """
+# 将时间值转换为秒数
+def second(val):
     if val is None:
         return 0.0
     
@@ -37,13 +30,8 @@ def _sec(val):
     except:
         return 0.0
 
-# 将各种类型的值转换为字符串
+# 将各种类型的值转换为字符串，用于JSON序列化
 def to_string(val):
-    """
-    将各种类型的值转换为字符串，用于JSON序列化
-    参数: val - 任意类型的值
-    返回: 字符串
-    """
     if val is None:
         return ''
     
@@ -59,16 +47,15 @@ def to_string(val):
     return str(val)
 
 #MySQL慢查询日志分析服务
-class SlowLogService:
- 
+class SlowLogService: 
     #初始化慢查询服务
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
-
-    def _connect(self, inst: Instance):     
+    #连接MySQL实例
+    def mysql_connect(self, inst: Instance):     
         if not pymysql:
-            raise RuntimeError("MySQL驱动不可用")
-        
+            print("错误：缺少pymysql模块，请运行 pip install pymysql")
+            return None 
         return pymysql.connect(
             host=inst.host,
             port=inst.port,
@@ -82,7 +69,7 @@ class SlowLogService:
         )
 
     #分析MySQL慢查询日志
-    def analyze(self, inst: Instance, top: int = 20, min_avg_ms: int = 10, tail_kb: int = 256):
+    def analyze(self, inst: Instance, top: int = 20, min_avg_ms: int = 10):
 
         # 基本参数检查
         if not inst:
@@ -91,13 +78,14 @@ class SlowLogService:
             return False, {}, "仅支持MySQL实例"
         
         try:
-            conn = self._connect(inst)
+            conn = self.mysql_connect(inst)
             try:
                 # 初始化返回数据结构
-                overview = {}
-                ps_top = []
-                file_samples = []
-                warnings = []
+                # 初始化返回数据结构
+                overview = {}        # 慢查询概览信息
+                ps_top = []         # 性能统计排行榜
+                file_samples = []   # 日志文件样本
+                warnings = []       # 警告信息列表
 
                 with conn.cursor() as cur:
                     # 1. 获取MySQL慢查询相关配置
@@ -146,27 +134,36 @@ class SlowLogService:
             )
         """)
         # 获取查询结果，如果为空则使用空列表
-        rows = cur.fetchall() or []
-        vars_map = {}
+        rows = cur.fetchall()
+        vars_dict = {}
         for row in rows:
             variable_name = row['Variable_name']
             variable_value = row['Value']
-            vars_map[variable_name] = variable_value
+            vars_dict[variable_name] = variable_value
 
         # 统一慢查询日志格式
-        ps_raw = str(vars_map.get('performance_schema', '')).strip().lower()
-        performance_schema_on = ps_raw in ('1', 'on', 'yes', 'true')
+        # 检查performance_schema是否开启
+        if vars_dict.get('performance_schema', '').upper() == 'ON':
+            performance_schema_on = True
+        else:
+            performance_schema_on = False
 
-        slow_raw = str(vars_map.get('slow_query_log', '')).strip().lower()
-        slow_query_log = slow_raw in ('1', 'on', 'yes', 'true')
+        # 检查慢查询日志是否开启
+        if vars_dict.get('slow_query_log', '').upper() == 'ON':
+            slow_query_log = True
+        else:
+            slow_query_log = False
 
-        long_query_time = vars_map.get('long_query_time')
-        log_output_raw = str(vars_map.get('log_output') or '')
-        slow_file = str(vars_map.get('slow_query_log_file') or '').strip()
+        # 获取慢查询时间阈值
+        long_query_time = vars_dict.get('long_query_time')
+        # 获取日志输出方式
+        log_output_raw = str(vars_dict.get('log_output') or '')
+        # 获取慢查询日志文件路径
+        slow_file = str(vars_dict.get('slow_query_log_file') or '').strip()
 
         return {
-            'performance_schema': 'ON' if performance_schema_on else 'OFF',
-            'slow_query_log': 'ON' if slow_query_log else 'OFF',
+            'performance_schema': performance_schema_on,
+            'slow_query_log': slow_query_log,
             'long_query_time': float(long_query_time) if str(long_query_time).replace('.', '', 1).isdigit() else long_query_time,
             'log_output': log_output_raw,
             'slow_query_log_file': slow_file or ''
@@ -189,40 +186,56 @@ class SlowLogService:
         
         try:
             cur.execute(sql, (int(effective_min_ms), int(top)))
-            rows = cur.fetchall() or []
+            rows = cur.fetchall()
         except Exception:
             return []
-
-        top_list = []
+      
+        top_list = []      # 存储慢查询统计结果的列表
         for r in rows:
+            # 获取SQL执行次数
             cnt = int(r.get('count_star') or 0)
-            avg_ms, total_ms = self._calculate_timing(r.get('sum_timer_wait'), cnt)
-            
+            # 计算平均执行时间和总执行时间
+            avg_ms, total_ms = self.get_time_info(r.get('sum_timer_wait'), cnt)           
+            # 获取扫描和返回的行数统计
             rows_examined = int(r.get('sum_rows_examined') or 0)
             rows_sent = int(r.get('sum_rows_sent') or 0)
-            re_avg = (rows_examined / cnt) if cnt else 0.0
-            rs_avg = (rows_sent / cnt) if cnt else 0.0
+            # 计算平均扫描行数
+            if cnt:
+                rows_examined_avg = rows_examined / cnt
+            else:
+                rows_examined_avg = 0.0
             
+            # 计算平均返回行数
+            if cnt:
+                rows_sent_avg = rows_sent / cnt
+            else:
+                rows_sent_avg = 0.0
+            
+            # 构建慢查询统计结果字典
             top_list.append({
-                'schema': r.get('schema_name') or '',
-                'digest': r.get('digest') or '',
-                'query': (r.get('digest_text') or '')[:500],
-                'count': cnt,
-                'avg_latency_ms': round(avg_ms, 2),
-                'total_latency_ms': round(total_ms, 2),
-                'rows_examined_avg': round(re_avg, 1),
-                'rows_sent_avg': round(rs_avg, 1),
+                'schema': r.get('schema_name') or '',              # 数据库名
+                'digest': r.get('digest') or '',                   # SQL摘要ID
+                'query': (r.get('digest_text') or '')[:500],       # SQL语句（截取前500字符）
+                'count': cnt,                                      # 执行次数
+                'avg_latency_ms': round(avg_ms, 2),                # 平均执行时间（毫秒）
+                'total_latency_ms': round(total_ms, 2),            # 总执行时间（毫秒）
+                'rows_examined_avg': round(rows_examined_avg, 1),  # 平均扫描行数
+                'rows_sent_avg': round(rows_sent_avg, 1),          # 平均返回行数
             })
         return top_list
     #计算平均和总执行时间
-    def _calculate_timing(self, timer_ps, cnt: int):
+    def get_time_info(self, timer_ps, cnt: int):
         try:
             ps = int(timer_ps)
-            total_ms = ps / 1_000_000_000.0  # 转换为毫秒
+            total_ms = ps / 1000000000.0  # 转换为毫秒
         except Exception:
             return 0.0, 0.0
         
-        avg_ms = (total_ms / cnt) if cnt else 0.0
+        # 计算平均执行时间，避免除零错误
+        if cnt:
+            avg_ms = total_ms / cnt
+        else:
+            avg_ms = 0.0
         return avg_ms, total_ms
     #从mysql.slow_log表获取样本数据
     def _get_samples_from_table(self, cur):
@@ -233,18 +246,19 @@ class SlowLogService:
                 "FROM mysql.slow_log ORDER BY start_time DESC LIMIT %s",
                 (10,)  # 获取最近10条记录
             )
-            rows = cur.fetchall() or []
+            rows = cur.fetchall()
 
             samples = []
             for r in rows:
+                # 构建慢查询记录字典
                 samples.append({
-                    'time': to_string(r.get('start_time')),
-                    'db': to_string(r.get('db')),
-                    'query_time_ms': round(_sec(r.get('query_time')) * 1000, 2),
-                    'lock_time_ms': round(_sec(r.get('lock_time')) * 1000, 2),
-                    'rows_sent': int(r.get('rows_sent') or 0),
-                    'rows_examined': int(r.get('rows_examined') or 0),
-                    'sql': to_string(r.get('sql_text'))
+                    'time': to_string(r.get('start_time')),                      # 查询开始时间
+                    'db': to_string(r.get('db')),                                # 数据库名
+                    'query_time_ms': round(second(r.get('query_time')) * 1000, 2), # 查询执行时间（毫秒）
+                    'lock_time_ms': round(second(r.get('lock_time')) * 1000, 2),   # 锁等待时间（毫秒）
+                    'rows_sent': int(r.get('rows_sent') or 0),                   # 返回行数
+                    'rows_examined': int(r.get('rows_examined') or 0),           # 扫描行数
+                    'sql': to_string(r.get('sql_text'))                          # SQL语句内容
                 })
             return samples
             
@@ -252,54 +266,6 @@ class SlowLogService:
             # 读取慢日志表抽样数据失败，返回空列表
             logger.info(f"读取慢日志表抽样失败: {e}")
             return []
-    #降低阈值到0.5ms(演示用)
-    def _collect_ps_top(self, cur, top: int, min_avg_ms: int):
-        effective_min_ms = max(0.5, min_avg_ms * 0.1)  # 使用更低的阈值
-        sql = (
-            "SELECT schema_name, digest, digest_text, count_star, "
-            "       sum_timer_wait, sum_rows_examined, sum_rows_sent "
-            "  FROM performance_schema.events_statements_summary_by_digest "
-            " WHERE (schema_name IS NULL OR schema_name NOT IN ('mysql','sys','information_schema')) "
-            "   AND sum_timer_wait >= (%s * 1000000000) * GREATEST(count_star, 1) "
-            "   AND count_star > 0 "
-            " ORDER BY (sum_timer_wait / GREATEST(count_star, 1)) DESC LIMIT %s"
-        )
-        try:
-            cur.execute(sql, (int(effective_min_ms), int(top)))
-            rows = cur.fetchall() or []
-        except Exception:
-            # 某些MySQL版本字段名不同或performance_schema表不可用，返回空列表
-            return []
-
-        def _ps_to_ms(timer_ps: Any, cnt: int) -> Tuple[float, float]:
-            try:
-                ps = int(timer_ps)
-                total_ms = ps / 1_000_000_000.0  # 1e12 ps = 1s; 1e9 ps = 1ms
-            except Exception:
-                # 时间转换失败，返回默认值0
-                return 0.0, 0.0
-            avg_ms = (total_ms / cnt) if cnt else 0.0
-            return avg_ms, total_ms
-
-        top_list: List[Dict[str, Any]] = []
-        for r in rows:
-            cnt = int(r.get('count_star') or 0)
-            avg_ms, total_ms = _ps_to_ms(r.get('sum_timer_wait'), cnt)
-            rows_examined = int(r.get('sum_rows_examined') or 0)
-            rows_sent = int(r.get('sum_rows_sent') or 0)
-            re_avg = (rows_examined / cnt) if cnt else 0.0
-            rs_avg = (rows_sent / cnt) if cnt else 0.0
-            top_list.append({
-                'schema': r.get('schema_name') or '',
-                'digest': r.get('digest') or '',
-                'query': (r.get('digest_text') or '')[:500],
-                'count': cnt,
-                'avg_latency_ms': round(avg_ms, 2),
-                'total_latency_ms': round(total_ms, 2),
-                'rows_examined_avg': round(re_avg, 1),
-                'rows_sent_avg': round(rs_avg, 1),
-            })
-        return top_list
 
     # 从mysql.slow_log表分页查询慢查询记录
     def list_from_table(
@@ -307,7 +273,7 @@ class SlowLogService:
         inst: Instance,
         page: int = 1,
         page_size: int = 10,
-        filters: Optional[Dict[str, Any]] = None):
+        filters=None):
         # 基本参数检查
         if not inst:
             return False, {}, "实例不存在"
@@ -315,27 +281,41 @@ class SlowLogService:
             return False, {}, "仅支持MySQL实例"
             
         try:
-            conn = self._connect(inst)
+            conn = self.mysql_connect(inst)
             try:
                 with conn.cursor() as cur:
                     # 检查慢查询日志配置
-                    overview = self._check_slow_log_config(cur)
-                    if not self._is_table_output_enabled(overview):
+                    overview = self.check_slow_log_config(cur)
+                    if not self.is_table_output_enabled(overview):
                         return False, {'overview': overview}, "仅支持 log_output 包含 TABLE 的数据库"
 
                     # 构建查询条件
-                    where_sql, params = self._build_query_conditions(filters or {})
+                    # where_sql, params = self.build_query_conditions(filters or {})
+                    where_sql, params = self.query_conditions(filters)
 
                     # 获取总记录数
-                    total = self._get_total_count(cur, where_sql, params)
+                    total = self.get_total_count(cur, where_sql, params)
 
                     # 处理分页参数
-                    page = max(1, int(page)) if str(page).isdigit() else 1
-                    page_size = max(1, min(100, int(page_size))) if str(page_size).isdigit() else 10
+                    # 验证并设置页码，确保页码至少为1
+                    if str(page).isdigit():
+                        page = max(1, int(page))
+                    else:
+                        page = 1
+                    
+                    # 验证并设置每页大小，限制在1-100之间
+                    if str(page_size).isdigit():
+                        page_size = int(page_size)
+                        if page_size < 1:
+                            page_size = 1
+                        elif page_size > 100:
+                            page_size = 100
+                    else:
+                        page_size = 10
                     offset = (page - 1) * page_size
 
                     # 获取分页数据
-                    items = self._get_paged_data(cur, where_sql, params, page_size, offset)
+                    items = self.get_paged_data(cur, where_sql, params, page_size, offset)
 
                     data = {
                         'overview': overview,
@@ -360,24 +340,42 @@ class SlowLogService:
             logger.error(f"查询慢日志表失败(实例ID={getattr(inst, 'id', None)}): {error_msg}")
             return False, {}, error_msg
     #检查慢查询日志配置
-    def _check_slow_log_config(self, cur):
+    def check_slow_log_config(self, cur):
         
         cur.execute(
             "SHOW GLOBAL VARIABLES WHERE Variable_name IN ('slow_query_log','log_output')"
         )
-        rows = cur.fetchall() or []
-        vars_map = {r['Variable_name']: r['Value'] for r in rows}
-        
+        rows = cur.fetchall()
+        # 将查询结果转换为字典格式，方便后续使用
+        vars_dict = {}
+        for r in rows:
+            vars_dict[r['Variable_name']] = r['Value']
+
         return {
-            'slow_query_log': str(vars_map.get('slow_query_log') or ''),
-            'log_output': str(vars_map.get('log_output') or ''),
+            'slow_query_log': str(vars_dict.get('slow_query_log') or ''),
+            'log_output': str(vars_dict.get('log_output') or ''),
         }
     #检查是否启用了TABLE输出
-    def _is_table_output_enabled(self, overview):
-        log_output = overview.get('log_output', '').strip().upper()
-        return any(p.strip() == 'TABLE' for p in log_output.split(',') if p.strip())
+    def is_table_output_enabled(self, overview):
+        # 获取MySQL的log_output配置值
+        log_output = overview.get('log_output')
+        
+        # 如果配置为空，返回False
+        if not log_output:
+            return False
+            
+        # 转换为大写字符串，便于比较
+        log_output = str(log_output).strip().upper()
+        
+        # 检查是否包含TABLE输出
+        # 支持的配置: 'TABLE' 或 'TABLE,FILE'
+        # 不支持的配置: 'FILE' 或 'NONE'
+        if 'TABLE' in log_output:
+            return True
+        else:
+            return False
     #构建查询条件
-    def _build_query_conditions(self, filters):
+    def query_conditions(self, filters):
         where_clauses = []
         params = []
 
@@ -414,13 +412,13 @@ class SlowLogService:
         where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         return where_sql, params
     #获取总记录数
-    def _get_total_count(self, cur, where_sql, params):
+    def get_total_count(self, cur, where_sql, params):
         count_sql = f"SELECT COUNT(*) AS cnt FROM mysql.slow_log{where_sql}"
         cur.execute(count_sql, params)
         count_row = cur.fetchone() or {}
         return int(count_row.get('cnt') or 0)
     #获取分页数据
-    def _get_paged_data(self, cur, where_sql, params, page_size, offset):
+    def get_paged_data(self, cur, where_sql, params, page_size, offset):
         data_sql = (
             "SELECT start_time, user_host, db, query_time, lock_time, rows_sent, rows_examined, sql_text "
             "FROM mysql.slow_log"
@@ -432,15 +430,16 @@ class SlowLogService:
 
         items = []
         for r in rows:
+            # 将数据库查询结果转换为前端需要的格式
             items.append({
-                'start_time': to_string(r.get('start_time')),
-                'user_host': to_string(r.get('user_host')),
-                'db': to_string(r.get('db')),
-                'query_time': _sec(r.get('query_time')),
-                'lock_time': _sec(r.get('lock_time')),
-                'rows_sent': int(r.get('rows_sent') or 0),
-                'rows_examined': int(r.get('rows_examined') or 0),
-                'sql_text': to_string(r.get('sql_text'))
+                'start_time': to_string(r.get('start_time')),        # 查询开始时间，转换为字符串
+                'user_host': to_string(r.get('user_host')),          # 用户和主机信息，转换为字符串
+                'db': to_string(r.get('db')),                        # 数据库名称，转换为字符串
+                'query_time': second(r.get('query_time')),             # 查询执行时间，转换为秒数
+                'lock_time': second(r.get('lock_time')),               # 锁等待时间，转换为秒数
+                'rows_sent': int(r.get('rows_sent') or 0),           # 返回的行数，转换为整数，默认0
+                'rows_examined': int(r.get('rows_examined') or 0),   # 检查的行数，转换为整数，默认0
+                'sql_text': to_string(r.get('sql_text'))             # SQL语句文本，转换为字符串
             })
         return items
 

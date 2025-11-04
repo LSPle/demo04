@@ -6,14 +6,13 @@ from typing import Dict, Any, Optional, Tuple
 from ..models import Instance
 
 logger = logging.getLogger(__name__)
+# 元组访问比字典访问 更快
 
 #直接通过SQL查询获取MySQL性能指标，无需依赖Prometheus
 class DirectMySQLMetricsService:
    
-    #存储状态
     def __init__(self):
-        self._last_status = {}
-        self._last_timestamp = 0
+        pass
     #建立MySQL连接"
     def _connect_to_mysql(self, inst: Instance):
        
@@ -45,74 +44,6 @@ class DirectMySQLMetricsService:
         except Exception as e:
             logger.error(f"查询执行失败: {query}, 错误: {e}")
             return None
-    #取QPS和TPS指标(可能会有不准确的情况)
-    def get_qps_tps_metrics(self, inst: Instance):
-        
-        conn = self._connect_to_mysql(inst)
-        if not conn:
-            return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
-        #计算出QPS和TPS
-        try:
-            current_time = time.time()          
-            # 获取当前状态变量
-            status_query = """
-            SHOW GLOBAL STATUS WHERE Variable_name IN (
-                'Queries', 'Questions', 'Com_commit', 'Com_rollback',
-                'Com_select', 'Com_insert', 'Com_update', 'Com_delete'
-            )
-            """
-            
-            result = self.execute_query(conn, status_query)
-            if not result:
-                return {'qps': None, 'tps': None, 'error': '状态查询失败'}
-            
-            # 解析状态变量
-            current_status = {}
-            # 打印完整 result 内容
-            logger.info(f"获取result的内容: {result}")
-            for row in result['rows']:
-                var_name = row[0]
-                var_value = row[1]
-                #本就不需要检测
-                if var_value and var_value.isdigit():
-                    current_status[var_name] = int(var_value)
-                else:            
-                    current_status[var_name] = 0
-            # 计算QPS和TPS（需要两次采样的差值）
-            qps = None
-            tps = None
-            
-            if self._last_status and self._last_timestamp > 0:
-                #时间差值
-                time_diff = current_time - self._last_timestamp
-                if time_diff > 0:
-                    # QPS = (当前Queries - 上次Queries) / 时间差
-                    queries_diff = current_status.get('Queries') - self._last_status.get('Queries')
-                    qps = round(queries_diff / time_diff, 2)
-                    
-                    # TPS = (当前事务数 - 上次事务数) / 时间差
-                    current_transactions = current_status.get('Com_commit') + current_status.get('Com_rollback')
-                    last_transactions = self._last_status.get('Com_commit') + self._last_status.get('Com_rollback')
-                    transactions_diff = current_transactions - last_transactions
-                    tps = round(transactions_diff / time_diff, 2)
-            
-            # 保存当前状态用于下次计算
-            self._last_status = current_status.copy()
-            self._last_timestamp = current_time
-            
-            #尝试删除0
-            return {
-                'qps': qps,
-                'tps': tps,
-                'queries_total': current_status.get('Queries'),
-                'transactions_total': current_status.get('Com_commit') + current_status.get('Com_rollback')
-            }
-            
-        except Exception as e:
-            logger.error(f"QPS/TPS指标获取失败: {e}")
-            return {'qps': None, 'tps': None, 'error': str(e)}
-        finally:
-            conn.close()
 
     def get_qps_tps_window(self, inst: Instance, window_s: int = 6):
         """在一次调用中完成两次采样，按窗口秒数计算 QPS/TPS。"""
@@ -192,7 +123,7 @@ class DirectMySQLMetricsService:
             
             # 简化判断：如果查询失败或结果不是1，说明未启用
             if not result or result['rows'][0][0] != 1:
-                logger.info(f"performance_schema 检查结果: {result['rows'] if (result and 'rows' in result) else 'Unavailable'}")
+                # logger.info(f"performance_schema 检查结果: {result['rows'] if (result and 'rows' in result) else 'Unavailable'}")
                 return {
                     'p95_latency_ms': None,
                     'avg_response_time_ms': None,
@@ -281,16 +212,21 @@ class DirectMySQLMetricsService:
             result = self.execute_query(conn, slow_query_query)
 
             '''查看数据'''
-            logger.info(f"慢查询查询返回{result}")
+            # logger.info(f"慢查询查询返回{result}")
             
 
-            if not result:
-                return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': '慢查询统计获取失败'}
+            # if not result:
+            #     return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': '慢查询统计获取失败'}
             
             status_vars = {}
             for row in result['rows']:
-                var_name, var_value = row
-                status_vars[var_name] = int(var_value) if var_value.isdigit() else 0
+                var_name = row[0]
+                var_value = row[1]
+                if var_value.isdigit():
+                    status_vars[var_name] = int(var_value)
+                else:
+                    status_vars[var_name] = 0
+                
             
             slow_queries = status_vars.get('Slow_queries', 0)
             total_queries = status_vars.get('Queries', 0)
@@ -317,6 +253,21 @@ class DirectMySQLMetricsService:
         if not conn:
             return {'index_usage_rate': None, 'error': 'MySQL连接失败'}
          # 获取索引使用相关的状态变量
+        """
+        Handler_read_key - 基于索引键读取行的次数（高=索引使用良好）
+
+        Handler_read_next - 按索引顺序读下一行的次数
+        
+        Handler_read_prev - 按索引顺序读前一行的次数
+        
+        Handler_read_first - 读索引第一个条目的次数
+        
+        Handler_read_last - 读索引最后一个条目的次数
+        
+        Handler_read_rnd - 根据固定位置读行的次数
+        
+        Handler_read_rnd_next - 读数据文件下一行的次数（高=全表扫描多）
+        """
         try:         
             index_query = """
             SHOW GLOBAL STATUS WHERE Variable_name IN (
@@ -326,8 +277,8 @@ class DirectMySQLMetricsService:
             )
             """        
             result = self.execute_query(conn, index_query)
-            if not result:
-                return {'index_usage_rate': None, 'error': '索引统计获取失败'}
+            # if not result:
+            #     return {'index_usage_rate': None, 'error': '索引统计获取失败'}
             
             status_vars = {}
             for row in result['rows']:
@@ -377,7 +328,20 @@ class DirectMySQLMetricsService:
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'threads_connected': None, 'threads_running': None, 'error': 'MySQL连接失败'}
+        """
+        连接相关:
+        Threads_connected：当前已建立的客户端连接数       
+        Threads_running：当前正在执行查询的线程数（活跃连接）     
+        Max_used_connections：MySQL 启动以来同时使用的最大连接数
         
+        InnoDB 行锁相关:
+        Innodb_row_lock_waits：发生行锁等待的次数  
+        Innodb_row_lock_time：行锁等待的总时间（毫秒）
+        
+        缓冲池性能相关:
+        Innodb_buffer_pool_read_requests：InnoDB 缓冲池的读请求次数    
+        Innodb_buffer_pool_reads：从磁盘读取页面的次数（未命中缓冲池）
+        """
         try:
             # 获取基础状态变量
             status_query = """
@@ -501,16 +465,14 @@ class DirectMySQLMetricsService:
     def get_all_direct_metrics(self, inst: Instance):
         metrics = {
             'generated_at': int(time.time()),
-            'source': 'direct_mysql_query'
+            
         }
-        
+        # 从metrics删除'source': 'direct_ysql_query'
         # 获取基础状态指标
         basic_metrics = self.get_basic_status_metrics(inst)
         metrics.update(basic_metrics)
         
-        # 获取QPS/TPS指标
-        qps_tps = self.get_qps_tps_metrics(inst)
-        metrics.update(qps_tps)
+        # QPS/TPS 指标在通过窗口采样
         
         # 获取性能指标
         perf_metrics = self.get_performance_schema_metrics(inst)
@@ -541,83 +503,90 @@ class DirectMySQLMetricsService:
             pass
         
         return metrics
-
-    def get_variable_max_connections(self, inst: Instance) -> dict:
-        """查询最大连接数。"""
+    """查询最大连接数。"""
+    def get_variable_max_connections(self, inst: Instance):
+        """获取MySQL max_connections配置变量"""
+        conn = self._connect_to_mysql(inst)
+        if not conn:
+            return {'max_connections': None, 'error': 'MySQL连接失败'}
+        
         try:
-            import pymysql
-            conn = pymysql.connect(
-                host=getattr(inst, 'host', 'localhost'),
-                port=int(getattr(inst, 'port', 3306)),
-                user=getattr(inst, 'username', 'root'),
-                password=getattr(inst, 'password', ''),
-                database=getattr(inst, 'database', 'mysql'),
-                cursorclass=pymysql.cursors.Cursor,
-                read_timeout=2,
-                write_timeout=2,
-                connect_timeout=2
-            )
-            try:
-                with conn.cursor() as cur:
-                    cur.execute('SELECT @@max_connections')
-                    row = cur.fetchone()
-                    if row is not None:
-                        try:
-                            val = int(row[0])
-                            return {'max_connections': val}
-                        except Exception:
-                            return {}
-            finally:
+            # result = self.execute_query(conn, 'SELECT @@max_connections')
+            # if not result or not result.get('rows'):
+            #     return {'max_connections': None, 'error': '配置查询失败'}
+            connections_query = """
+            SELECT @@max_connections
+            """
+            result = self.execute_query(conn, connections_query)
+            if not result or not result.get('rows'):
+                return {'max_connections': None, 'error': '配置查询失败'}
+            
+            row = result['rows'][0]
+            if row and len(row) > 0:
                 try:
-                    conn.close()
-                except Exception:
-                    pass
-        except Exception:
-            return {}
-
-    def get_replication_metrics(self, inst: Instance) -> dict:
-        """查询主从复制延迟（毫秒）。优先 SHOW SLAVE STATUS，其次 SHOW REPLICA STATUS。"""
+                    val = int(row[0])
+                    return {'max_connections': val}
+                except (ValueError, TypeError):
+                    # logger.error(f"max_connections值解析失败: {row[0]}")
+                    return {'max_connections': None, 'error': '配置值解析失败'}
+            
+            return {'max_connections': None, 'error': '未获取到配置值'}
+            
+        except Exception as e:
+            logger.error(f"获取max_connections失败: {e}")
+            return {'max_connections': None, 'error': str(e)}
+        finally:
+            conn.close()
+            
+    def get_replication_metrics(self, inst: Instance):
+        """获取MySQL主从复制延迟指标"""
+        conn = self._connect_to_mysql(inst)
+        if not conn:
+            return {'replication_delay_ms': None, 'error': 'MySQL连接失败'}
+        
         try:
-            import pymysql
-            conn = pymysql.connect(
-                host=getattr(inst, 'host', 'localhost'),
-                port=int(getattr(inst, 'port', 3306)),
-                user=getattr(inst, 'username', 'root'),
-                password=getattr(inst, 'password', ''),
-                database=getattr(inst, 'database', 'mysql'),
-                cursorclass=pymysql.cursors.DictCursor,
-                read_timeout=2,
-                write_timeout=2,
-                connect_timeout=2
-            )
-            try:
-                delay_ms = None
-                with conn.cursor() as cur:
-                    for q in ['SHOW SLAVE STATUS', 'SHOW REPLICA STATUS']:
-                        try:
-                            cur.execute(q)
-                            row = cur.fetchone()
-                            if row:
-                                sec = row.get('Seconds_Behind_Master')
-                                if sec is None:
-                                    sec = row.get('Seconds_Behind_Source')
-                                if sec is not None:
-                                    try:
-                                        delay_ms = int(float(sec)) * 1000
-                                    except Exception:
-                                        pass
+            delay_ms = None
+            # 尝试不同的复制状态查询（兼容不同MySQL版本）
+            replication_queries = ['SHOW SLAVE STATUS', 'SHOW REPLICA STATUS']
+            
+            for query in replication_queries:
+                try:
+                    result = self.execute_query(conn, query)
+                    if result and result.get('rows') and len(result['rows']) > 0:
+                        # 获取列名索引
+                        columns = result.get('columns', [])
+                        row = result['rows'][0]
+                        
+                        # 构建字典便于查找
+                        row_dict = {}
+                        for i, col in enumerate(columns):
+                            if i < len(row):
+                                row_dict[col] = row[i]
+                        
+                        # 查找延迟字段
+                        sec = row_dict.get('Seconds_Behind_Master')
+                        if sec is None:
+                            sec = row_dict.get('Seconds_Behind_Source')
+                        
+                        if sec is not None:
+                            try:
+                                delay_ms = int(float(sec)) * 1000
                                 break
-                        except Exception:
-                            # 尝试下一个查询
-                            continue
-                return {'replication_delay_ms': delay_ms}
-            finally:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
-        except Exception:
-            return {'replication_delay_ms': None}
+                            except (ValueError, TypeError):
+                                logger.error(f"复制延迟值解析失败: {sec}")
+                                continue
+                except Exception as e:
+                    # 尝试下一个查询
+                    logger.debug(f"复制状态查询失败: {query}, 错误: {e}")
+                    continue
+            
+            return {'replication_delay_ms': delay_ms}
+            
+        except Exception as e:
+            logger.error(f"获取复制指标失败: {e}")
+            return {'replication_delay_ms': None, 'error': str(e)}
+        finally:
+            conn.close()
 
 
 # 全局实例

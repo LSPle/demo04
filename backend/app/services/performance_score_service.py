@@ -12,7 +12,7 @@ from typing import Dict, Any
 分数范围均为 0-100，值越高表示越好。
 """
 
-
+#转换为浮点数
 def to_num(x: Any, default: float = 0.0):
     try:
         if x is None:
@@ -21,7 +21,7 @@ def to_num(x: Any, default: float = 0.0):
     except Exception:
         return default
 
-
+# 对值进行限制，确保在 [low, high] 范围内(保险)
 def clamp_value(value: float, low: float = 0.0, high: float = 100.0):
     return max(low, min(high, value))
 
@@ -38,39 +38,35 @@ def compute_scores(performance: Dict[str, Any]):
     """
 
     # 资源分（CPU/内存/磁盘占用越高，分越低）
-    cpu = to_num(performance.get('cpuUsage'), 0)
-    mem = to_num(performance.get('memoryUsage'), 0)
-    disk = to_num(performance.get('diskUsage'), 0)
-    resource_penalty = 0.4 * cpu + 0.4 * mem + 0.2 * disk
-    resource_score = clamp_value(100.0 - resource_penalty)
+    cpu = to_num(performance.get('cpuUsage'), 0)        # 获取CPU使用率，默认0
+    mem = to_num(performance.get('memoryUsage'), 0)     # 获取内存使用率，默认0
+    disk = to_num(performance.get('diskUsage'), 0)      # 获取磁盘使用率，默认0
+    resource_penalty = 0.4 * cpu + 0.4 * mem + 0.2 * disk  # 计算资源扣分：CPU和内存权重各40%，磁盘20%
+    resource_score = clamp_value(100.0 - resource_penalty)  # 资源得分 = 100 - 扣分，限制在0-100范围！
 
     # 连接分（连接占用、锁等待、死锁影响分数）
-    cur_conn = to_num(performance.get('currentConnections'), 0)
-    max_conn = to_num(performance.get('maxConnections'), 1000)
-    conn_ratio = 0.0 if max_conn <= 0 else cur_conn / max_conn
-    conn_base = 95.0 - conn_ratio * 60.0  # 占满时约 35 分，空闲约 95 分
-    lock_waits = to_num(performance.get('lockWaits'), 0)
-    deadlocks = to_num(performance.get('deadlocks'), 0)
-    conn_penalty = min(lock_waits / 10.0, 15.0) + min(deadlocks * 5.0, 20.0)
-    connection_score = clamp_value(conn_base - conn_penalty)
+    cur_conn = to_num(performance.get('currentConnections'), 0)    # 当前连接数
+    max_conn = to_num(performance.get('maxConnections'), 1000)     # 最大连接数，默认1000
+    conn_ratio = 0.0 if max_conn <= 0 else cur_conn / max_conn    # 连接占用比例
+    conn_base = 95.0 - conn_ratio * 60.0                          # 基础连接分：占满时约35分，空闲时约95分
+    lock_waits = to_num(performance.get('lockWaits'), 0)           # 锁等待次数
+    deadlocks = to_num(performance.get('deadlocks'), 0)            # 死锁次数
+    conn_penalty = min(lock_waits / 10.0, 15.0) + min(deadlocks * 5.0, 20.0)  # 连接扣分：锁等待最多扣15分，死锁最多扣20分
+    connection_score = clamp_value(conn_base - conn_penalty)       # 连接得分 = 基础分 - 扣分
 
     # 查询分（平均耗时和慢查询比例影响分数）
-    avg_ms = to_num(performance.get('avgQueryTime'), 0)
-    slow_ratio = to_num(performance.get('slowQueryRatio'), 0)
-    query_score = 90.0
-    if avg_ms > 100:
+    avg_ms = to_num(performance.get('avgQueryTime'), 0)      # 平均查询时间（毫秒）
+    slow_ratio = to_num(performance.get('slowQueryRatio'), 0) # 慢查询比例（%）
+    query_score = 100.0  # 查询性能基础分：满分开始
+    if avg_ms > 100:     # 查询时间超过100ms，扣20分
         query_score -= 20
-    elif avg_ms > 50:
+    elif avg_ms > 50:    # 查询时间50-100ms，扣10分
         query_score -= 10
-    elif avg_ms < 20:
-        query_score += 10
 
-    if slow_ratio > 5:
+    if slow_ratio > 5:   # 慢查询比例超过5%，扣15分
         query_score -= 15
-    elif slow_ratio > 2:
+    elif slow_ratio > 2: # 慢查询比例2-5%，扣10分
         query_score -= 10
-    elif slow_ratio < 1:
-        query_score += 5
 
     query_score = clamp_value(query_score)
 
@@ -88,6 +84,17 @@ def compute_scores(performance: Dict[str, Any]):
         cache_score = clamp_value(sum(cache_vals) / max(1, len(cache_vals)))
 
     # 总分（加权平均）
+    """
+    加权平均计算总分：
+    - 资源分（25%）
+    - 连接分（20%）
+    - 查询分（30%）
+    - 缓存分（25%）
+
+    查询性能30%最高 ：因为查询速度是数据库性能的核心指标，直接影响用户体验。
+    资源使用25% 和 缓存效率25% ：系统资源和缓存都是性能基础，同等重要。
+    连接管理20%最低 ：主要影响并发能力，相对次要
+    """
     overall = (
         0.25 * resource_score +
         0.20 * connection_score +

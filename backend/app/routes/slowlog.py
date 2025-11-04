@@ -6,12 +6,12 @@ from ..services.slowlog_service import slowlog_service
     慢日志分析
 '''
 
-# 创建慢日志蓝图
+
 slowlog_bp = Blueprint('slowlog', __name__)
 
 @slowlog_bp.post('/instances/<int:instance_id>/slowlog/analyze')
+# 慢日志分析
 def analyze_slowlog(instance_id: int):
-    """慢日志分析"""
     user_id = request.args.get('userId')
     
     # 查找实例
@@ -26,33 +26,20 @@ def analyze_slowlog(instance_id: int):
     data = request.get_json() or {}
     top = data.get('top', 20)
     min_avg_ms = data.get('min_avg_ms', 10)
-    tail_kb = data.get('tail_kb', 256)
     
     # 调用服务分析
-    success, result, message = slowlog_service.analyze(instance, top=top, min_avg_ms=min_avg_ms, tail_kb=tail_kb)
+    success, result, message = slowlog_service.analyze(instance, top=top, min_avg_ms=min_avg_ms)
     
     if success:
-        # 兼容前端显示：补充 avg_time_ms 与 rows_examined 字段
-        data = result or {}
-        tops = list(data.get('ps_top') or [])
-        formatted_tops = []
-        for t in tops:
-            item = dict(t or {})
-            # 将 avg_latency_ms 同步为 avg_time_ms（ms）
-            if 'avg_latency_ms' in item and 'avg_time_ms' not in item:
-                item['avg_time_ms'] = item.get('avg_latency_ms')
-            # 将 rows_examined_avg 同步为 rows_examined（平均扫描行数）
-            if 'rows_examined_avg' in item and 'rows_examined' not in item:
-                item['rows_examined'] = item.get('rows_examined_avg')
-            formatted_tops.append(item)
-        data['ps_top'] = formatted_tops
+        data = result
         return jsonify(data), 200
     else:
         return jsonify({'error': message}), 400
 
 @slowlog_bp.get('/instances/<int:instance_id>/slowlog')
+# 获取慢日志列表
 def list_slowlog(instance_id: int):
-    """获取慢日志列表"""
+
     user_id = request.args.get('userId')
     
     # 查找实例

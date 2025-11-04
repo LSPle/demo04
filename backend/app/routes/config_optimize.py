@@ -8,40 +8,22 @@ from ..services.metrics_summary_service import metrics_summary_service
 from ..services.config_score_service import compute_scores
 from ..services.deepseek_service import DeepSeekClient, strip_markdown
 
-"""
-配置优化路由
 
-将原先散落在 metrics.py 中与“配置优化”相关的接口迁移到此文件：
-- GET   /api/config/summary                      通用指标摘要（含评分）
-- GET   /api/instances/<id>/config/summary      指定实例指标摘要（含评分）
-- POST  /api/instances/<id>/config/advise       基于指标的配置优化建议（DeepSeek）
-
-同时提供用于复用的构建函数，便于旧路由做兼容性委托调用。
-"""
 
 logger = logging.getLogger(__name__)
 
 config_optimize_bp = Blueprint('config_optimize', __name__)
 
 
-# -------- 复用构建函数（供路由与旧文件委托调用） -------- #
-
-def build_general_config_summary():
-    """构建通用系统指标摘要（不依赖特定实例）并计算评分"""
+# 获取一般指标摘要
+def general_config_summary():
+   
     try:
         inst = Instance.query.first()
         if not inst:
-            # 创建一个虚拟实例对象用于获取系统级指标
-            class MockInstance:
-                def __init__(self):
-                    self.host = '192.168.112.128'
-                    self.port = 3306
-                    self.username = 'root'
-                    self.password = '123456'
-                    self.database = 'mysql'
-            inst = MockInstance()
+            return jsonify({'error': '未找到数据库实例'}), 404
 
-        data = metrics_summary_service.get_summary(inst)
+        data = metrics_summary_service.get_summary_with_window(inst, 6)
         # 增加配置优化评分计算
         try:
             score = compute_scores(data)
@@ -51,12 +33,37 @@ def build_general_config_summary():
             pass
         return jsonify(data), 200
     except Exception as e:
-        logger.error(f"获取通用指标摘要失败: {e}")
         return jsonify({'error': f'获取通用指标摘要失败: {e}'}), 500
 
-
+# 构建指定实例的指标摘要并计算评分（强制窗口采样，默认6秒）
 def build_instance_config_summary(instance_id: int):
-    """构建指定实例的指标摘要并计算评分（强制窗口采样，默认6秒）"""
+    try:
+        # 按 userId 过滤实例归属
+        user_id = request.args.get('userId')
+        q = Instance.query
+        if user_id is not None:
+            q = q.filter_by(user_id=user_id)
+        inst = q.filter_by(id=instance_id).first()
+        if not inst:
+            return jsonify({'error': '实例不存在'}), 404
+
+
+        # 始终执行窗口采样摘要
+        data = metrics_summary_service.get_summary_with_window(inst, 6)
+
+        # 增加配置优化评分计算
+        try:
+            score = compute_scores(data)
+            data['score'] = score
+        except Exception:
+            pass
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({'error': f'获取指标摘要失败: {e}'}), 500
+
+
+def build_instance_config_advise(instance_id: int):
+    """根据指标摘要生成配置优化建议（DeepSeek），并附带评分（窗口采样）"""
     try:
         # 按 userId 过滤实例归属
         user_id = request.args.get('userId')
@@ -76,35 +83,8 @@ def build_instance_config_summary(instance_id: int):
         except Exception:
             window_int = 6
 
-        # 始终执行窗口采样摘要
-        data = metrics_summary_service.get_summary_with_window(inst, window_int)
-
-        # 增加配置优化评分计算
-        try:
-            score = compute_scores(data)
-            data['score'] = score
-        except Exception:
-            pass
-        return jsonify(data), 200
-    except Exception as e:
-        logger.error(f"获取指标摘要失败: {e}")
-        return jsonify({'error': f'获取指标摘要失败: {e}'}), 500
-
-
-def build_instance_config_advise(instance_id: int):
-    """根据指标摘要生成配置优化建议（DeepSeek），并附带评分"""
-    try:
-        # 按 userId 过滤实例归属
-        user_id = request.args.get('userId')
-        q = Instance.query
-        if user_id is not None:
-            q = q.filter_by(user_id=user_id)
-        inst = q.filter_by(id=instance_id).first()
-        if not inst:
-            return jsonify({'error': '实例不存在'}), 404
-
-        # 获取指标摘要
-        summary = metrics_summary_service.get_summary(inst)
+        # 获取窗口采样的指标摘要
+        summary = metrics_summary_service.get_summary_with_window(inst, window_int)
         # 增加配置优化评分计算，方便前端复用
         try:
             score = compute_scores(summary)
@@ -194,7 +174,7 @@ def build_instance_config_advise(instance_id: int):
 
 @config_optimize_bp.get('/config/summary')
 def config_general_summary():
-    return build_general_config_summary()
+    return general_config_summary()
 
 
 @config_optimize_bp.get('/instances/<int:instance_id>/config/summary')

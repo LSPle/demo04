@@ -89,25 +89,23 @@ def compute_scores(summary: Dict[str, Any]):
     deadlocks = to_num(mysql.get('deadlocks'), 0.0)
     index_rate = to_percentage(mysql.get('index_usage_rate'), 100.0)  # 缺失视为 100（不扣分）
 
-    mysql_score = 90.0
-    # 连接压力：占满时扣至 ~65 分；空闲影响较小
-    mysql_score -= min(conn_ratio * 35.0, 25.0)
+    # MySQL配置评分：从100分开始，只扣分不加分
+    mysql_score = 100.0
+    
+    # 连接压力：连接使用率过高时扣分
+    mysql_score -= min(conn_ratio * 25.0, 20.0)
 
-    # 缓存命中率：偏低扣分，极高略增分
+    # 缓存命中率：命中率低时扣分
     if hit < 80:
-        mysql_score -= 10
+        mysql_score -= 15  # 命中率很低，扣15分
     elif hit < 90:
-        mysql_score -= 5
-    elif hit >= 95:
-        mysql_score += 3
+        mysql_score -= 8   # 命中率偏低，扣8分
 
-    # 慢查询比例（百分比）：高慢比明显扣分，低慢比加少量分
+    # 慢查询比例：慢查询过多时扣分
     if slow_ratio > 5:
-        mysql_score -= 10
+        mysql_score -= 15  # 慢查询很多，扣15分
     elif slow_ratio > 2:
-        mysql_score -= 6
-    elif slow_ratio < 1:
-        mysql_score += 4
+        mysql_score -= 8   # 慢查询偏多，扣8分
 
     # 平均响应时间：高延迟扣分，低延迟加少量分
     if avg_ms > 100:
@@ -137,30 +135,22 @@ def compute_scores(summary: Dict[str, Any]):
     p95 = to_num(perf.get('p95_latency_ms'), 0.0)
     redo = to_num(perf.get('redo_write_latency_ms'), 0.0)
 
-    performance_score = 85.0
-    # P95 延迟
+    # 性能评分：从100分开始，只扣分不加分
+    performance_score = 100.0
+    
+    # P95 延迟：延迟过高时扣分
     if p95 > 50:
-        performance_score -= 20
+        performance_score -= 25  # 延迟很高，扣25分
     elif p95 > 30:
-        performance_score -= 10
+        performance_score -= 15  # 延迟偏高，扣15分
     elif p95 > 20:
-        performance_score -= 5
+        performance_score -= 8   # 延迟略高，扣8分
 
-    # Redo/WAL 写入延迟
+    # Redo/WAL 写入延迟：写入延迟过高时扣分
     if redo > 10:
-        performance_score -= 12
+        performance_score -= 15  # 写入延迟很高，扣15分
     elif redo > 5:
-        performance_score -= 6
-
-    # QPS/TPS 简单加分（仅作正向提示，避免夸张）
-    if qps > 1000:
-        performance_score += 5
-    elif qps > 500:
-        performance_score += 2
-    if tps > 800:
-        performance_score += 5
-    elif tps > 400:
-        performance_score += 2
+        performance_score -= 8   # 写入延迟偏高，扣8分
 
     performance_score = clamp_value(performance_score)
 
@@ -174,11 +164,17 @@ def compute_scores(summary: Dict[str, Any]):
     security_score = clamp_value(security_score)
 
     # 5) 总分加权（可按业务调整）
+    # 配置优化总分（加权平均）- MySQL配置最重要
+    """
+    MySQL配置35%最高 ：因为这是数据库优化项目的核心，配置参数直接影响数据库性能。
+    性能表现30%次之 ：配置优化的最终目标就是提升性能，需要重点关注。
+    系统配置25% 和 安全配置10% ：系统层面配置也重要但相对次要。
+    """
     overall = (
-        0.25 * system_score +
-        0.35 * mysql_score +
-        0.30 * performance_score +
-        0.10 * security_score
+        system_score * 0.25 +        # 系统配置：25%
+        mysql_score * 0.35 +         # MySQL配置：35%（最重要）
+        performance_score * 0.30 +   # 性能表现：30%
+        security_score * 0.10        # 安全配置：10%
     )
 
     return {
@@ -189,6 +185,3 @@ def compute_scores(summary: Dict[str, Any]):
         'security': int(round(security_score)),
     }
 
-
-# 备注：如需兼容架构优化页面的旧字段（如 cpuUsage/memoryUsage/avgQueryTime 等），
-# 可在调用层进行字段映射，或单独实现一个适配器函数，将旧结构转换到 summary 格式后复用本方法。

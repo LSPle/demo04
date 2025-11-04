@@ -1,7 +1,8 @@
 import time
 import logging
 from typing import Any, Dict, Optional
-
+# 引入psutil模块
+import psutil           
 from ..models import Instance
 from .system_metrics_service import system_metrics_service
 from .slowlog_service import slowlog_service
@@ -22,49 +23,49 @@ logger = logging.getLogger(__name__)
 '''
 class MetricsSummaryService:
  
-
     def get_summary(self, inst: Instance):
         summary: Dict[str, Any] = {
-            'system': {
-                'cpu_usage': None,
-                'memory_usage': None,
-                'disk_usage': None,
-                'network_io_mbps': None,
+            'system': {                          # 系统资源指标
+                'cpu_usage': None,               # CPU使用率 (%)
+                'memory_usage': None,            # 内存使用率 (%)
+                'disk_usage': None,              # 磁盘使用率 (%)
+                'network_io_mbps': None,         # 网络IO速率 (MB/s)
             },
-            'mysql': {
-                'threads_connected': None,
-                'threads_running': None,
-                'innodb_row_lock_waits': None,
-                'innodb_row_lock_time_ms': None,
-                'connection_pressure_pct': None,
-                'cache_hit_rate': None,  # 0~100
-                'deadlocks': None,       # 累计值（若启用 innodb_metrics）
-                'slow_query_ratio': None,  # 慢查询比例
-                'avg_response_time_ms': None,  # 平均响应时间
-                'index_usage_rate': None,  # 索引使用率
-                'max_connections': None,   # 最大连接数
-                'replication_delay_ms': None,  # 主从延迟（毫秒）
-                'peak_connections': None,  # 峰值连接数（Max_used_connections）
-                'transactions_total': None,  # 事务总数（近实时累计值）
+            'mysql': {                           # MySQL数据库指标
+                'threads_connected': None,       # 当前连接数
+                'threads_running': None,         # 活跃线程数
+                'innodb_row_lock_waits': None,   # 行锁等待次数
+                'innodb_row_lock_time_ms': None, # 行锁等待时间 (ms)
+                'connection_pressure_pct': None, # 连接压力百分比
+                'cache_hit_rate': None,          # 缓存命中率 (0~100)
+                'deadlocks': None,               # 死锁次数（累计值）
+                'slow_query_ratio': None,        # 慢查询比例 (%)
+                'avg_response_time_ms': None,    # 平均响应时间 (ms)
+                'index_usage_rate': None,        # 索引使用率 (%)
+                'max_connections': None,         # 最大连接数配置
+                'replication_delay_ms': None,    # 主从复制延迟 (ms)
+                'peak_connections': None,        # 峰值连接数
+                'transactions_total': None,      # 事务总数（累计）
             },
-            'slowlog': {
-                'total_recent': None,
-                'note': '',
+            'slowlog': {                         # 慢查询日志统计
+                'total_recent': None,            # 最近慢查询总数
+                'note': '',                      # 备注信息
             },
             # 新增：性能指标（若 exporter 已接入则给出数值，否则保持为 None）
-            'perf': {
-                'qps': None,
-                'tps': None,
-                'p95_latency_ms': None,
-                'io_latency_ms': None,
-                'redo_write_latency_ms': None,  # 平均写延迟（ms）
-                'slowest_query_ms': None,
+            'perf': {                            # 性能关键指标
+                'qps': None,                     # 每秒查询数
+                'tps': None,                     # 每秒事务数
+                'p95_latency_ms': None,          # P95延迟 (ms)
+                'io_latency_ms': None,           # IO延迟 (ms)
+                'redo_write_latency_ms': None,   # Redo日志写延迟 (ms)
+                'slowest_query_ms': None,        # 最慢查询耗时 (ms)
             },
             'generated_at': int(time.time())
         }
 
         # 系统指标采集（仅使用 psutil）
         try:
+            # 先进行健康检查
             if system_metrics_service.health_check():
                 sys_metrics = system_metrics_service.get_all_metrics()
                 summary['system']['cpu_usage'] = sys_metrics.get('cpu_usage')
@@ -78,15 +79,20 @@ class MetricsSummaryService:
 
             # 计算网络IO速率（MB/s），基于 psutil 简单采样
             try:
-                import psutil
                 c1 = psutil.net_io_counters()
+
+                logger.info(f"初始网络IO统计: {c1}")
+
                 t1 = time.time()
                 time.sleep(1)
                 c2 = psutil.net_io_counters()
                 t2 = time.time()
+                # 确保dt不会太小
                 dt = max(1e-3, t2 - t1)
-                bytes_delta = max(0, (c2.bytes_sent - c1.bytes_sent)) + max(0, (c2.bytes_recv - c1.bytes_recv))
-                summary['system']['network_io_mbps'] = round(bytes_delta / dt / 1048576, 2)
+                #总字节数 =（发送+接收）
+                bytes = max(0, (c2.bytes_sent - c1.bytes_sent)) + max(0, (c2.bytes_recv - c1.bytes_recv))
+                #计算网络IO速率=（发送+接收）/时间间隔/(1024*1024)（转换为MB/s）
+                summary['system']['network_io_mbps'] = round(bytes / dt / 1048576, 2)
             except Exception as e:
                 logger.info(f"网络IO采集失败: {e}")
         except Exception as e:
@@ -112,16 +118,14 @@ class MetricsSummaryService:
         summary['mysql']['transactions_total'] = direct_metrics.get('transactions_total')
         summary['perf']['redo_write_latency_ms'] = direct_metrics.get('redo_write_latency_ms')
         summary['perf']['slowest_query_ms'] = direct_metrics.get('slowest_query_ms')
+        summary['perf']['p95_latency_ms'] = direct_metrics.get('p95_latency_ms')
         
-        # 更新QPS、TPS、P95延迟等关键指标
-        if direct_metrics.get('qps') is not None:
-            summary['perf']['qps'] = direct_metrics.get('qps')
-        if direct_metrics.get('tps') is not None:
-            summary['perf']['tps'] = direct_metrics.get('tps')
-        if direct_metrics.get('p95_latency_ms') is not None:
-            summary['perf']['p95_latency_ms'] = direct_metrics.get('p95_latency_ms')
+        # 3) 慢日志总数（仅支持TABLE 输出）
+        # 尝试使用多值解包写法：
+        # ok ：布尔值，表示操作是否成功
+        # data ：字典，包含查询结果数据
+        # msg ：字符串，包含错误信息或状态消息
 
-        # 3) 慢日志总数（TABLE 输出）
         ok, data, msg = slowlog_service.list_from_table(inst, page=1, page_size=1, filters={})
         if ok:
             summary['slowlog']['total_recent'] = int(data.get('total') or 0)
@@ -130,16 +134,11 @@ class MetricsSummaryService:
 
         return summary
 
-    # 新增：支持在一次接口内进行窗口二次采样（简化版，委托服务层）
+    # 新增：支持在一次接口内进行窗口二次采样
     def get_summary_with_window(self, inst: Instance, window_s: int = 6):
         summary = self.get_summary(inst)
-        try:
-            sleep_seconds = max(1, int(window_s))
-        except Exception:
-            sleep_seconds = 6
-        
         # 强制执行窗口采样，失败时抛出异常
-        qps_tps = direct_mysql_metrics_service.get_qps_tps_window(inst, sleep_seconds)
+        qps_tps = direct_mysql_metrics_service.get_qps_tps_window(inst, window_s)
         if isinstance(qps_tps, dict):
             # 检查是否有错误信息
             if qps_tps.get('error'):

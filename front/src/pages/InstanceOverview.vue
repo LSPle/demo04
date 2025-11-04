@@ -158,7 +158,8 @@ async function loadInstancesData(showMessage = false) {
 async function refresh() {
   try {
     refreshing.value = true;
-    // 直接重新加载数据，避免触发全局清理导致的并发加载
+    // 清空全局缓存并通知其他页面，同时本页立即重新加载
+    globalInstances.clearGlobalData();
     await loadInstancesData(true);
   } catch (e) {
     message.error('刷新失败');

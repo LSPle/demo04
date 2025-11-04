@@ -10,13 +10,9 @@ logger = logging.getLogger(__name__)
 
 monitor_bp = Blueprint('monitor', __name__)
 
-
+# 手动触发实例状态检测
 @monitor_bp.post('/monitor/instances/check')
 def check_instances_status():
-    """
-    手动触发实例状态检测（仅实时检测，不写入数据库）
-    支持按用户ID过滤：POST请求体中包含userId参数则只检测该用户的实例（当前忽略）
-    """
     try:
         data = request.get_json() or {}
         # 当前方案不落库且不区分用户，后续可按userId过滤
@@ -33,14 +29,14 @@ def check_instances_status():
         return jsonify({'error': f'实例状态检测失败: {str(e)}'}), 500
 
 
-@monitor_bp.get('/monitor/instances/summary')
-def get_instances_summary():
-    """
-    获取实例状态汇总信息（基于实时检测）
-    """
-    try:
-        summary = instance_monitor_service.get_instance_status_summary()
-        return jsonify(summary), 200
-    except Exception as e:
-        logger.error(f"获取实例状态汇总失败: {e}")
-        return jsonify({'error': f'获取实例状态汇总失败: {str(e)}'}), 500
+# @monitor_bp.get('/monitor/instances/summary')
+# def get_instances_summary():
+#     """
+#     获取实例状态汇总信息（基于实时检测）
+#     """
+#     try:
+#         summary = instance_monitor_service.get_instance_status_summary()
+#         return jsonify(summary), 200
+#     except Exception as e:
+#         logger.error(f"获取实例状态汇总失败: {e}")
+#         return jsonify({'error': f'获取实例状态汇总失败: {str(e)}'}), 500

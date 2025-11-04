@@ -64,8 +64,8 @@ const analysis = ref(null);
 const columns = [
   { title: 'SQL', dataIndex: 'query', key: 'query', ellipsis: true },
   { title: '次数', dataIndex: 'count', key: 'count', width: 80 },
-  { title: '平均耗时(ms)', dataIndex: 'avg_time_ms', key: 'avg_time_ms', width: 140 },
-  { title: '扫描行数', dataIndex: 'rows_examined', key: 'rows_examined', width: 120 },
+  { title: '平均耗时(ms)', dataIndex: 'avg_latency_ms', key: 'avg_latency_ms', width: 140 },
+  { title: '扫描行数', dataIndex: 'rows_examined_avg', key: 'rows_examined_avg', width: 120 },
 ];
 
 function pretty(obj) { try { return JSON.stringify(obj, null, 2); } catch { return String(obj); } }
@@ -91,17 +91,15 @@ function normalizeItem(r, idx) {
   if (!Number.isFinite(count)) count = Number(base.count_star);
   if (!Number.isFinite(count)) count = 1;
 
-  let avgMs = base.avg_time_ms;
-  if (!Number.isFinite(Number(avgMs))) avgMs = base.avg_latency_ms;
+  let avgMs = base.avg_latency_ms;
   if (!Number.isFinite(Number(avgMs))) {
     const qsec = base.query_time; // 秒
     const seconds = toNumber(qsec, 0);
     avgMs = round2(seconds * 1000);
   }
 
-  // 扫描行数：优先 rows_examined，其次 rows_examined_avg，最后默认 0
-  let rowsExamined = Number(base.rows_examined);
-  if (!Number.isFinite(rowsExamined)) rowsExamined = Number(base.rows_examined_avg);
+  // 扫描行数：直接使用 rows_examined_avg，如果无效则默认 0
+  let rowsExamined = Number(base.rows_examined_avg);
   if (!Number.isFinite(rowsExamined)) rowsExamined = 0;
 
   return {
@@ -109,8 +107,8 @@ function normalizeItem(r, idx) {
     _rowKey: idx,
     query,
     count,
-    avg_time_ms: round2(avgMs),
-    rows_examined: rowsExamined,
+    avg_latency_ms: round2(avgMs),
+    rows_examined_avg: rowsExamined,
   };
 }
 

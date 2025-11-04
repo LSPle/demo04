@@ -100,7 +100,10 @@ const handleSubmit = async (values) => {
       if (result.access_token) {
         // 保存登录信息
         localStorage.setItem('access_token', result.access_token);
-        localStorage.setItem('userId', values.username);
+        // 使用后端返回的用户ID，避免与用户名混淆
+        if (result?.user?.id) {
+          localStorage.setItem('userId', String(result.user.id));
+        }
         
         message.success('登录成功！');
         router.push('/overview');
