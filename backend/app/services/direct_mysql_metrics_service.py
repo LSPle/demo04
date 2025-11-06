@@ -16,8 +16,7 @@ class DirectMySQLMetricsService:
     #建立MySQL连接"
     def _connect_to_mysql(self, inst: Instance):
        
-        try:
-                       
+        try:                     
             conn = pymysql.connect(
                 host=inst.host,
                 port=inst.port,
@@ -27,7 +26,6 @@ class DirectMySQLMetricsService:
                 connect_timeout=10,
                 read_timeout=30
             )
-            logger.info(f"MySQL连接成功")
             return conn
         except Exception as e:
             logger.error(f"MySQL连接失败: {e}")
@@ -37,7 +35,7 @@ class DirectMySQLMetricsService:
         try:
             cursor = conn.cursor()
             cursor.execute(query)
-            columns = [desc[0] for desc in cursor.description]
+            columns = [desc[0] for desc in cursor.description] 
             rows = cursor.fetchall()
             cursor.close()
             return {'columns': columns, 'rows': rows}
@@ -45,8 +43,8 @@ class DirectMySQLMetricsService:
             logger.error(f"查询执行失败: {query}, 错误: {e}")
             return None
 
+    #在一次调用中完成两次采样，按窗口秒数计算 QPS/TPS
     def get_qps_tps_window(self, inst: Instance, window_s: int = 6):
-        """在一次调用中完成两次采样，按窗口秒数计算 QPS/TPS。"""
         conn = self._connect_to_mysql(inst)
         if not conn:
             return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
@@ -70,11 +68,11 @@ class DirectMySQLMetricsService:
                 except Exception:
                     s1[name] = 0
             # 睡眠窗口秒数
-            try:
-                sleep_seconds = max(1, int(window_s))
-            except Exception:
-                sleep_seconds = 6
-            time.sleep(sleep_seconds)
+            # try:
+            #     sleep_seconds = max(1, int(window_s))
+            # except Exception:
+            #     sleep_seconds = 6
+            time.sleep(6)
             # 第二次采样
             t1 = time.time()
             r2 = self.execute_query(conn, status_query)
@@ -105,13 +103,10 @@ class DirectMySQLMetricsService:
         except Exception as e:
             logger.info(f"窗口采样失败: {e}")
             return {'qps': None, 'tps': None, 'error': str(e)}
-        finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-    #从performance_schema获取性能指标
+        finally:         
+            conn.close()
+ 
+    #从performance_schema获取 性能指标
     def get_performance_schema_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
         if not conn:
@@ -123,7 +118,6 @@ class DirectMySQLMetricsService:
             
             # 简化判断：如果查询失败或结果不是1，说明未启用
             if not result or result['rows'][0][0] != 1:
-                # logger.info(f"performance_schema 检查结果: {result['rows'] if (result and 'rows' in result) else 'Unavailable'}")
                 return {
                     'p95_latency_ms': None,
                     'avg_response_time_ms': None,
@@ -132,7 +126,11 @@ class DirectMySQLMetricsService:
                      
                      
             # 性能统计信息
-            #
+            # 请帮我从数据库的‘SQL性能统计表’里，查一下在最近5分钟内，所有活跃过的SQL语句的总体表现：           
+            # 它们的平均执行时间是多少毫秒？（方便我判断数据库快还是慢）
+            # 总共有多少种不同类型的SQL语句？（看看业务复杂度）
+            # 这些SQL语句加起来一共被执行了多少次？（看看负载压力）
+
             perf_query = """
             SELECT 
                 ROUND(AVG(avg_timer_wait) / 1000000, 2) as avg_response_time_ms,
@@ -146,12 +144,14 @@ class DirectMySQLMetricsService:
             result = self.execute_query(conn, perf_query)
             if not result or not result['rows']:
                 return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': '性能数据不足'}
-            '''查看数据'''
+
             logger.info(f"Performance 查询返回{result['rows']}")
             # avg_response_time_ms = result['rows'][0][0]
             
             # 尝试获取P95延迟（使用MySQL兼容的方法）
             # 由于MySQL不支持PERCENTILE_CONT，使用近似计算方法
+
+            # 请帮我找出在最近5分钟内，执行时间最长的100个SQL语句，并显示它们各自的平均执行时间和总执行次数
             p95_query = """
             SELECT 
                 ROUND(avg_timer_wait / 1000000, 2) as latency_ms,
@@ -197,6 +197,7 @@ class DirectMySQLMetricsService:
             return {'p95_latency_ms': None, 'avg_response_time_ms': None, 'error': str(e)}
         finally:
             conn.close()
+    
     #获取慢查询相关指标
     def get_slow_query_metrics(self, inst: Instance):
         conn = self._connect_to_mysql(inst)
@@ -211,7 +212,6 @@ class DirectMySQLMetricsService:
             """            
             result = self.execute_query(conn, slow_query_query)
 
-            '''查看数据'''
             # logger.info(f"慢查询查询返回{result}")
             
 

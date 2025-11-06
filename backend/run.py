@@ -1,6 +1,8 @@
 import os
+import logging
 from app import create_app
 
+# 先创建应用对象
 app = create_app()
 
 if __name__ == "__main__":

@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, request
 from ..models import db, Instance
 from ..utils.db_connection import db_connection_manager
-from ..services.database_service import database_service
 from ..services.table_analyzer_service import table_analyzer_service
 import pymysql
 from datetime import datetime
@@ -260,12 +259,21 @@ def list_instance_databases(instance_id):
         if not instance:
             return jsonify({'error': '实例不存在'}), 404
         
-        # 获取数据库列表
-        ok, databases, msg = database_service.list_databases(instance)
-        # if not ok:
-        #     status_code = 400 if msg in ['仅支持MySQL实例'] else 500
-        #     return jsonify({'error': msg}), status_code
-        
+        # 使用统一的连接管理器执行查询，获取数据库列表
+        ok, rows, err = db_connection_manager.execute_query(instance, "SHOW DATABASES")
+        # 为保持之前的容错行为：若失败，返回空列表但状态仍为200
+        if not ok:
+            return jsonify({'databases': []}), 200
+
+        # 提取数据库名称，兼容多种返回结构
+        databases = []
+        for row in rows:
+            if isinstance(row, (list, tuple)) and row:
+                databases.append(row[0])
+            elif isinstance(row, dict) and row:
+                databases.append(list(row.values())[0])
+
+        databases.sort()
         return jsonify({'databases': databases}), 200
         
     except Exception as e:

@@ -54,6 +54,19 @@ def create_app():
     
 
     
+    # 统一日志配置：INFO 级别，降低 werkzeug 噪声
+    import logging
+    root = logging.getLogger()
+    if not root.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+            datefmt='%H:%M:%S'
+        )
+    else:
+        root.setLevel(logging.INFO)
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+
     return app
 
 
