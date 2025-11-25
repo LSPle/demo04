@@ -29,7 +29,7 @@ class Config:
     # DeepSeek 配置（集中管理，不依赖 .env）
     DEEPSEEK_API_KEY = "sk-7e7ee707daf0430b9ed805e2672090ec"
     DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-    DEEPSEEK_MODEL = "deepseek-reasoner"
+    DEEPSEEK_MODEL = "deepseek-chat"
     DEEPSEEK_TIMEOUT = 300
     LLM_ENABLED = True
     LLM_DEBUG = False

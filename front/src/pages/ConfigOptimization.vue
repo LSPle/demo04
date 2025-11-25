@@ -324,10 +324,9 @@
       </a-card>
     </div>
 
-    <!-- 分析结果卡片（动态添加） -->
-    <div v-if="analysisResult" class="analysis-result-section">
-      <a-card title="配置优化分析结果" class="analysis-result-card">
-        <!-- 空白内容区域 -->
+    <div v-if="analysisResultText" class="analysis-result-section">
+      <a-card title="分析结果" class="analysis-result-card">
+        <pre class="plain-text">{{ analysisResultText }}</pre>
       </a-card>
     </div>
   </div>
@@ -349,7 +348,7 @@ const instanceOptions = ref([]);
 const selectedInstance = ref('');
 const dataLoaded = ref(false);
 const configData = ref({});
-const analysisResult = ref(null);
+const analysisResultText = ref('');
 const configScore = ref({
   overall: 0,
   system: 0,
@@ -470,15 +469,26 @@ async function startAnalysis() {
   try {
     analysisLoading.value = true;
 
-    // 调用后端生成配置优化建议（DeepSeek，若未配置将返回降级信息）
-    const advise = await apiClient.getConfigAdvice(Number(selectedInstance.value));
-    analysisResult.value = {
-      overallScore: configScore.value.overall,
-      recommendations: advise?.advice || null,
-      backendError: advise?.error || null
+    const perfPayload = {
+      cpuUsage: configData.value?.systemMetrics?.cpuUsage,
+      memoryUsage: configData.value?.systemMetrics?.memoryUsage,
+      diskIOLatency: configData.value?.systemMetrics?.diskIOLatency,
+      bufferPoolHitRate: configData.value?.mysqlMetrics?.bufferPoolHitRate,
+      activeConnections: configData.value?.mysqlMetrics?.activeConnections,
+      slowQueryRatio: configData.value?.mysqlMetrics?.slowQueryRatio,
+      avgResponseTime: configData.value?.mysqlMetrics?.avgResponseTime,
+      lockWaitTime: configData.value?.mysqlMetrics?.lockWaitTime,
+      deadlockCount: configData.value?.mysqlMetrics?.deadlockCount,
+      indexUsageRate: configData.value?.mysqlMetrics?.indexUsageRate,
+      qps: configData.value?.performanceMetrics?.qps,
+      tps: configData.value?.performanceMetrics?.tps,
+      p95Latency: configData.value?.performanceMetrics?.p95Latency,
+      redoWalLatency: configData.value?.performanceMetrics?.redoWalLatency,
     };
+    const resText = await apiClient.getConfigAdviceText(Number(selectedInstance.value), perfPayload);
+    analysisResultText.value = typeof resText === 'string' ? resText : String(resText || '');
 
-    message.success('配置分析完成（后端建议已返回）');
+    message.success('分析完毕');
   } catch (error) {
     message.error('分析失败');
   } finally {
@@ -638,14 +648,27 @@ onUnmounted(() => {
 }
 
 .analysis-result-section {
+  margin-top: 24px;
   animation: slideInUp 0.6s ease-out;
 }
 
 .analysis-result-card {
   border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  border: 1px solid #e8f4fd;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background: #fff;
+  border: 1px solid #f0f0f0;
 }
+
+.analysis-result-card .ant-card-head { padding: 0 12px; }
+.analysis-result-card .ant-card-head-title { color: #000000; font-weight: 600; font-size: 20px;  }
+.analysis-result-card .ant-card-body { padding: 12px; }
+
+.plain-text { white-space: pre-wrap; font-size: 20px; line-height: 30px; color: #000000; margin-top: 8px; word-break: break-word; }
+.plain-text a { color: #1677FF; text-decoration: underline; }
+.plain-text .highlight { color: #FF6B00; }
+
+@media (max-width: 768px) { .plain-text { font-size: 20px; line-height: 32px; } }
+@media (max-width: 480px) { .plain-text { font-size: 20px; line-height: 34px; } }
 
 /* 配置评分模块样式 */
 .config-score-module {

@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 import logging
 import json
 import time
@@ -6,7 +6,7 @@ import time
 from ..models import Instance
 from ..services.metrics_summary_service import metrics_summary_service
 from ..services.config_score_service import compute_scores
-from ..services.deepseek_service import DeepSeekClient, strip_markdown
+from ..services.config_advice_service import get_config_advice
 
 
 
@@ -38,12 +38,8 @@ def general_config_summary():
 # 构建指定实例的指标摘要并计算评分（强制窗口采样，默认6秒）
 def build_instance_config_summary(instance_id: int):
     try:
-        # 按 userId 过滤实例归属
-        user_id = request.args.get('userId')
-        q = Instance.query
-        if user_id is not None:
-            q = q.filter_by(user_id=user_id)
-        inst = q.filter_by(id=instance_id).first()
+        # 直接按实例ID查找，不进行 userId 过滤
+        inst = Instance.query.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
 
@@ -65,12 +61,8 @@ def build_instance_config_summary(instance_id: int):
 def build_instance_config_advise(instance_id: int):
     """根据指标摘要生成配置优化建议（DeepSeek），并附带评分（窗口采样）"""
     try:
-        # 按 userId 过滤实例归属
-        user_id = request.args.get('userId')
-        q = Instance.query
-        if user_id is not None:
-            q = q.filter_by(user_id=user_id)
-        inst = q.filter_by(id=instance_id).first()
+        # 直接按实例ID查找，不进行 userId 过滤
+        inst = Instance.query.filter_by(id=instance_id).first()
         if not inst:
             return jsonify({'error': '实例不存在'}), 404
 
@@ -133,37 +125,11 @@ def build_instance_config_advise(instance_id: int):
             lines.append(f"- {k}: {v}")
         user_prompt = "\n".join(lines)
 
-        client = DeepSeekClient()
-        if not getattr(client, 'enabled', True) or not getattr(client, 'api_key', None):
-            # 未配置 DeepSeek 时返回空建议，供前端降级显示
-            return jsonify({
-                'metrics': summary,
-                'advice': None,
-                'error': 'DeepSeek未配置'
-            }), 200
-
-        try:
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-            resp_text = client._make_api_call(messages)
-            cleaned = strip_markdown(resp_text or '')
-            # 再做一次轻量净化：压缩多余空行
-            import re
-            cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
-            return jsonify({
-                'metrics': summary,
-                'advice': cleaned,
-                'error': None
-            }), 200
-        except Exception as e:
-            logger.error(f"DeepSeek 分析失败: {e}")
-            return jsonify({
-                'metrics': summary,
-                'advice': None,
-                'error': f'DeepSeek分析失败: {e}'
-            }), 200
+        return jsonify({
+            'metrics': summary,
+            'advice': None,
+            'error': 'DeepSeek未配置'
+        }), 200
 
     except Exception as e:
         logger.error(f"生成配置优化建议失败: {e}")
@@ -185,3 +151,15 @@ def config_metrics_summary(instance_id: int):
 @config_optimize_bp.post('/instances/<int:instance_id>/config/advise')
 def config_metrics_advise(instance_id: int):
     return build_instance_config_advise(instance_id)
+
+
+@config_optimize_bp.post('/instances/<int:instance_id>/config/advice')
+def config_metrics_advice(instance_id: int):
+    try:
+        data = request.get_json(silent=True) or {}
+        content = get_config_advice(None, override=data)
+        if not content:
+            return jsonify({'error': 'LLM分析失败'}), 500
+        return Response(content, mimetype='text/plain')
+    except Exception as e:
+        return jsonify({'error': f'分析失败: {e}'}), 500

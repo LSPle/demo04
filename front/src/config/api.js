@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
 
   // 新增：架构分析接口（POST）
   ARCH_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/arch/analyze`,
+  ARCH_ADVISE: (id) => `${API_BASE_URL}/api/instances/${id}/arch/advise`,
   SLOWLOG_ANALYZE: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog/analyze`,
   // 新增：慢日志列表（GET）
   SLOWLOG_LIST: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog`,
@@ -30,6 +31,7 @@ export const API_ENDPOINTS = {
   // 新路径：配置优化摘要与建议（替代 /metrics/*）
   CONFIG_SUMMARY: (id) => `${API_BASE_URL}/api/instances/${id}/config/summary`,
   CONFIG_ADVISE: (id) => `${API_BASE_URL}/api/instances/${id}/config/advise`,
+  CONFIG_ADVICE: (id) => `${API_BASE_URL}/api/instances/${id}/config/advice`,
 };
 
 export default API_BASE_URL;

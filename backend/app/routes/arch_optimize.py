@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, Response
 import logging
 import time
 from typing import Any, Dict
@@ -6,6 +6,7 @@ from typing import Any, Dict
 from ..models import Instance
 from ..services.metrics_summary_service import metrics_summary_service
 from ..services.performance_score_service import compute_scores as compute_performance_scores
+from ..services.architecture_advice_service import get_architecture_advice
 
 
 logger = logging.getLogger(__name__)
@@ -25,14 +26,8 @@ def _num(x, default=0):
 @arch_opt_bp.post('/instances/<int:instance_id>/arch/analyze')
 #架构优化分析
 def analyze_architecture(instance_id: int):
-    user_id = request.args.get('userId')
-
-    # 1) 查找实例（与配置优化接口保持一致：仅在提供 userId 时进行过滤）
-    # Instance.query 是SQLAlchemy 查询对象，用于操作数据库表
-    q = Instance.query
-    if user_id is not None:
-        q = q.filter_by(user_id=user_id)
-    inst = q.filter_by(id=instance_id).first()
+    # 直接按实例ID查找，不进行 userId 过滤
+    inst = Instance.query.filter_by(id=instance_id).first()
     if not inst:
         return jsonify({'error': '实例不存在'}), 404
 
@@ -118,3 +113,20 @@ def analyze_architecture(instance_id: int):
     except Exception as e:
         logger.error(f"架构分析失败: {e}")
         return jsonify({'error': f'分析失败: {e}'}), 500
+
+
+@arch_opt_bp.post('/instances/<int:instance_id>/arch/advise')
+def advise_architecture(instance_id: int):
+    try:
+        data = request.get_json(silent=True) or {}
+        content = get_architecture_advice(None, override=data)
+        if not content:
+            return jsonify({'error': 'LLM分析失败'}), 500
+
+        return Response(content, mimetype='text/plain')
+    except Exception as e:
+        return jsonify({'error': f'分析失败: {e}'}), 500
+
+@arch_opt_bp.post('/instances/<int:instance_id>/arch/advice')
+def advise_architecture_alias(instance_id: int):
+    return advise_architecture(instance_id)

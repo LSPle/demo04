@@ -1,11 +1,9 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from ..models import Instance
-from ..services.deepseek_service import get_deepseek_client
 from ..services.table_analyzer_service import table_analyzer_service
+from ..services.sql_advice_service import get_sql_advice
 import pymysql
 import logging
-import re
-import sqlparse as _sp
 
 '''
     SQL审核优化,DeepSeek分析
@@ -20,53 +18,19 @@ sql_analyze_bp = Blueprint('sql_analyze', __name__)
 @sql_analyze_bp.post('/sql/analyze')
 def analyze_sql():
     try:
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "请求体不能为空"}), 400
-            
-        # 验证instanceId
-        instance_id = data.get('instanceId')
-        if not instance_id or instance_id <= 0:
-            return jsonify({"error": "请提供有效的实例ID"}), 400
-            
-        # 验证SQL
+        data = request.get_json() or {}
+        instance_id = int(data.get('instanceId') or 0)
         sql = (data.get('sql') or '').strip()
-        if not sql:
-            return jsonify({"error": "SQL语句不能为空"}), 400
-
-        #使用sqlparse库智能解析SQL语句(可能不需要)
-        try:   
-            split_result = _sp.split(sql)
-            statements = []
-            for s in split_result:
-                cleaned_s = s.strip()
-                if cleaned_s:
-                    statements.append(cleaned_s)
-        #获取所有错误
-        except Exception:
-            split_result = sql.spilt(';')
-            statements = []
-            for s in split_result:
-                cleaned_s = s.strip()
-                if cleaned_s:
-                    statements.append(cleaned_s)
-        if len(statements) != 1:
-            return jsonify({"error": "仅支持单条 SQL 语句分析，请去除多余的分号或多语句"}), 400
-        sql = statements[0]
-        
-        # 验证数据库名称
         database = (data.get('database') or '').strip()
-        if not database:
-            return jsonify({"error": "数据库名称不能为空"}), 400
-        # 简单的数据库名称格式验证（防止SQL注入）
-        
-        if not re.match(r'^[a-zA-Z0-9_]+$', database):
-            return jsonify({"error": "数据库名称只能包含字母、数字和下划线"}), 400
-            
-        # 后端默认策略：启用执行计划分析
-        enable_explain = True
+        if not instance_id or not sql or not database:
+            return jsonify({"error": "缺少必要参数: instanceId, sql, database"}), 400
+        # 仅支持单条语句，避免多语句带来的风险
+        statements = [s.strip() for s in sql.split(';') if s.strip()]
+        if len(statements) != 1:
+            return jsonify({"error": "仅支持单条 SQL 语句，请去除多余分号或多语句"}), 400
+        sql = statements[0]
 
-        # 按 userId 过滤实例归属
+        # 查找并校验实例
         user_id = request.args.get('userId')
         q = Instance.query
         if user_id is not None:
@@ -77,50 +41,40 @@ def analyze_sql():
         if (inst.db_type or '').strip() != 'MySQL':
             return jsonify({"error": "仅支持MySQL实例"}), 400
 
-        # 构造严格上下文：仅包含 原始SQL、数据库类型与版本、EXPLAIN、表DDL、现有索引
+        # 解析表名
+        table_names = []
         try:
-            context_summary = table_analyzer_service.generate_strict_context(
-                sql=sql,
-                instance=inst,
-                database=database,
-                enable_explain=enable_explain,
-            )
-        except Exception as e:
-            logger.warning(f"严格上下文生成失败 (实例ID: {instance_id}): {e}")
-            context_summary = ""
+            table_names = table_analyzer_service.extract_table_names(sql) or []
+        except Exception:
+            table_names = []
 
-        #调用deepseek分析
-        client = get_deepseek_client()
-        logger.info(f"DeepSeek客户端配置: enabled={client.enabled}, api_key_set={bool(client.api_key)}, base_url={client.base_url}")
-        
-        # 使用增强的分析接口，拿到分析文本
+        # 获取表的元信息（列/索引/近似行数/主键）
+        tables_meta = []
         try:
-            llm_result = client.analyze_sql(sql, context_summary)
-            logger.info(f"DeepSeek分析结果: {bool(llm_result)}")
-        except Exception as llm_e:
-            logger.error(f"DeepSeek分析异常: {llm_e}")
-            llm_result = None
+            for t in table_names[:table_analyzer_service.max_tables]:
+                ok, meta, msg = table_analyzer_service._get_table_metadata_only(inst, database, t)
+                if ok and meta:
+                    tables_meta.append(meta)
+        except Exception:
+            pass
 
-        if not llm_result:
-            logger.warning("DeepSeek分析失败，尝试降级到基础分析功能")
-            # 降级：使用基础分析功能
-            try:
-                analysis_result = client.rewrite_sql(sql, context_summary)
-                logger.info(f"DeepSeek基础分析结果: {bool(analysis_result)}")
-            except Exception as rewrite_e:
-                logger.error(f"DeepSeek基础分析异常: {rewrite_e}")
-                analysis_result = None
-            
-            return jsonify({
-                "analysis": analysis_result if analysis_result else "DeepSeek分析服务暂时不可用，请稍后重试",
-                "rewrittenSql": None
-            }), 200
+        # 获取执行计划（传统）
+        explain_rows = []
+        try:
+            ok, plan, msg = table_analyzer_service.get_explain_plan(inst, database, sql)
+            if ok:
+                explain_rows = list(plan.get('traditional_plan') or [])
+        except Exception:
+            explain_rows = []
 
-        return jsonify({
-            "analysis": llm_result.get("analysis"),
-            "rewrittenSql": None
-        }), 200
-
+        # 构造摘要并调用DeepSeek
+        summary = {
+            'sql': sql,
+            'tables': tables_meta,
+            'explain': explain_rows,
+        }
+        analysis_text = get_sql_advice(summary)
+        return Response(analysis_text or "", mimetype='text/plain')
     except Exception as e:
         return jsonify({"error": f"服务器错误: {e}"}), 500
 

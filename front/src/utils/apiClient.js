@@ -195,10 +195,18 @@ class ApiClient {
    */
   async analyzeArchitecture(instanceId, windowSeconds = 6) {
     const baseUrl = API_ENDPOINTS.ARCH_ANALYZE(instanceId);
-    // 先添加window_s参数，再添加userId
-    const urlWithWindow = `${baseUrl}?window_s=${windowSeconds}`;
-    const finalUrl = this.appendUserId(urlWithWindow);
+    const finalUrl = `${baseUrl}?window_s=${windowSeconds}`;
     return this.post(finalUrl, {}, true, { timeout: 300000 });
+  }
+
+  /**
+   * 架构建议（DeepSeek）
+   * 返回纯文本
+   */
+  async analyzeArchitectureAdvice(instanceId, performance) {
+    const url = API_ENDPOINTS.ARCH_ADVISE(instanceId);
+    const body = typeof performance === 'object' ? { performance } : {};
+    return this.post(url, body, true, { timeout: 300000 });
   }
 
   /**
@@ -244,14 +252,23 @@ class ApiClient {
     const win = Number.isNaN(n) || n <= 0 ? 6 : Math.max(1, n);
     const qs = new URLSearchParams({ window_s: String(win) }).toString();
     const url = `${base}?${qs}`;
-    return this.get(this.appendUserId(url));
+    return this.get(url);
   }
 
   /**
    * 获取配置优化建议（DeepSeek，新路径 /config）
    */
   async getConfigAdvice(instanceId) {
-    return this.post(this.appendUserId(API_ENDPOINTS.CONFIG_ADVISE(instanceId)), {}, true, { timeout: 300000 });
+    return this.post(API_ENDPOINTS.CONFIG_ADVISE(instanceId), {}, true, { timeout: 300000 });
+  }
+
+  /**
+   * 配置建议（直接拼接前端已有数据，纯文本返回）
+   */
+  async getConfigAdviceText(instanceId, performance) {
+    const body = typeof performance === 'object' ? { performance } : {};
+    const url = API_ENDPOINTS.CONFIG_ADVICE(instanceId);
+    return this.post(url, body, true, { timeout: 300000 });
   }
 
 }

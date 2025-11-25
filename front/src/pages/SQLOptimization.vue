@@ -64,24 +64,10 @@
       </a-card>
     </div>
 
-    <!-- 数据展示卡片（与配置优化一致的布局） -->
-    <div class="data-display-section">
-      <a-card title="分析结果" class="data-display-card">
-        <!-- 等待态：无结果时显示 -->
-        <div v-if="!optimizationResults" class="waiting-state">
-          <a-empty description="等待分析结果">
-            <template #description>
-              <span style="color: #999;">请选择实例、数据库并填写SQL后点击“开始分析”</span>
-            </template>
-          </a-empty>
-        </div>
-
-        <!-- 加载完成态：有结果时显示 -->
-        <div v-else class="data-loaded-state">
-          <div class="results-content">
-            <pre>{{ optimizationResults }}</pre>
-          </div>
-        </div>
+    <!-- 分析结果卡片（动态添加） -->
+    <div v-if="optimizationResults" class="analysis-result-section">
+      <a-card title="分析结果" class="analysis-result-card">
+        <pre class="plain-text">{{ optimizationResults }}</pre>
       </a-card>
     </div>
   </div>
@@ -139,28 +125,20 @@ function handleInstanceChange(val) {
 }
 
 async function executeSqlAnalysis() {
-  if (!selectedInstance.value) {
-    message.warning('请选择实例');
-    return;
-  }
-  if (!selectedDatabase.value) {
-    message.warning('请选择数据库');
-    return;
-  }
-  if (!sqlQuery.value.trim()) {
-    message.warning('请输入SQL语句');
-    return;
-  }
+  if (!selectedInstance.value) { message.warning('请选择实例'); return; }
+  if (!selectedDatabase.value) { message.warning('请选择数据库'); return; }
+  if (!sqlQuery.value.trim()) { message.warning('请输入SQL语句'); return; }
   try {
     isAnalyzing.value = true;
-    const res = await apiClient.analyzeSql({
+    const payload = {
       instanceId: Number(selectedInstance.value),
-      database: selectedDatabase.value,
-      sql: sqlQuery.value.trim()
-    });
-    optimizationResults.value = res?.analysis || res?.content || JSON.stringify(res, null, 2);
-  } catch (e) {
-    message.error(e.message || '分析失败');
+      database: String(selectedDatabase.value),
+      sql: String(sqlQuery.value || '')
+    };
+    const res = await apiClient.analyzeSql(payload);
+    const text = typeof res === 'string' ? res : (typeof res?.analysis === 'string' ? res.analysis : '');
+    optimizationResults.value = text || '（未返回分析文本）';
+    message.success('分析完成');
   } finally {
     isAnalyzing.value = false;
   }
@@ -326,6 +304,19 @@ onMounted(() => {
   line-height: 1.5;
   color: #333;
 }
+
+.plain-text {
+  white-space: pre-wrap;
+  font-size: 20px;
+  line-height: 30px;
+  color: #000000;
+  margin-top: 8px;
+  word-break: break-word;
+}
+.plain-text a { color: #1677FF; text-decoration: underline; }
+.plain-text .highlight { color: #FF6B00; }
+@media (max-width: 768px) { .plain-text { font-size: 20px; line-height: 32px; } }
+@media (max-width: 480px) { .plain-text { font-size: 20px; line-height: 34px; } }
 
 /* 下拉动画与从属关系样式 */
 .database-dropdown-wrapper {

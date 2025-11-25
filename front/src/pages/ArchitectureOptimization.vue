@@ -301,9 +301,9 @@
     </div>
 
     <!-- 分析结果卡片（动态添加） -->
-    <div v-if="analysisResult" class="analysis-result-section">
+    <div v-if="analysisResultText" class="analysis-result-section">
       <a-card title="分析结果" class="analysis-result-card">
-        <!-- 空白内容 -->
+        <pre class="plain-text">{{ analysisResultText }}</pre>
       </a-card>
     </div>
   </div>
@@ -334,7 +334,7 @@ const performanceScore = ref({
   connection: 0,
   query: 0
 });
-const analysisResult = ref(null);
+const analysisResultText = ref('');
 
 // 状态映射（从全局状态获取）
 const statusMap = reactive({});
@@ -383,8 +383,8 @@ async function loadData() {
     // 2) 调用后端架构分析接口，直接使用后端采集与评分
     const res = await apiClient.analyzeArchitecture(Number(selectedInstance.value));
 
-    // 获取数据阶段不展示分析结果卡片，保持为空
-    analysisResult.value = null;
+    // 清空分析文本
+    analysisResultText.value = '';
 
     // 映射后端性能数据到页面字段
     const perf = res?.performance || {};
@@ -446,48 +446,29 @@ async function startAnalysis() {
 
   try {
     analysisLoading.value = true;
-    // 调用后端架构分析接口
-    const res = await apiClient.analyzeArchitecture(Number(selectedInstance.value));
-
-    // 保存分析结果原始数据
-    analysisResult.value = res || {};
-
-    // 将后端性能数据映射到页面的性能展示模块
-    const perf = res?.performance || {};
-    const inst = res?.instance || instanceData.value || {};
-    performanceData.value = {
-      version: inst.version || instanceData.value?.version || 'unknown',
-      cpuUsage: perf.cpuUsage ?? 0,
-      memoryUsage: perf.memoryUsage ?? 0,
-      diskUsage: perf.diskUsage ?? 0,
-      networkIO: perf.networkIO ?? 0,
-      replicationDelay: perf.replicationDelay ?? 0,
-      activeConnections: perf.activeConnections ?? 0,
-      currentConnections: perf.currentConnections ?? 0,
-      maxConnections: perf.maxConnections ?? 0,
-      peakConnections: perf.peakConnections ?? 0,
-      transactionCount: perf.transactionCount ?? 0,
-      lockWaits: perf.lockWaits ?? 0,
-      deadlocks: perf.deadlocks ?? 0,
-      bufferPoolHitRate: perf.bufferPoolHitRate ?? 0,
-      sharedBufferHitRate: perf.sharedBufferHitRate ?? (perf.bufferPoolHitRate ?? 0),
-      qps: perf.qps ?? 0,
-      slowQueryEnabled: perf.slowQueryEnabled ?? false,
-      slowestQuery: perf.slowestQuery ?? 0,
-      slowQueryRatio: perf.slowQueryRatio ?? 0,
-      avgQueryTime: perf.avgQueryTime ?? 0
+    const perfPayload = {
+      cpuUsage: performanceData.value?.cpuUsage,
+      memoryUsage: performanceData.value?.memoryUsage,
+      diskUsage: performanceData.value?.diskUsage,
+      networkIO: performanceData.value?.networkIO,
+      activeConnections: performanceData.value?.activeConnections,
+      currentConnections: performanceData.value?.currentConnections,
+      maxConnections: performanceData.value?.maxConnections,
+      peakConnections: performanceData.value?.peakConnections,
+      transactionCount: performanceData.value?.transactionCount,
+      lockWaits: performanceData.value?.lockWaits,
+      deadlocks: performanceData.value?.deadlocks,
+      bufferPoolHitRate: performanceData.value?.bufferPoolHitRate,
+      sharedBufferHitRate: performanceData.value?.sharedBufferHitRate,
+      qps: performanceData.value?.qps,
+      slowQueryRatio: performanceData.value?.slowQueryRatio,
+      avgQueryTime: performanceData.value?.avgQueryTime,
+      slowestQuery: performanceData.value?.slowestQuery,
+      replicationDelay: performanceData.value?.replicationDelay,
     };
-
-    // 使用后端评分
-    const sc = res?.score || {};
-    performanceScore.value = {
-      overall: parseInt(sc.overall ?? 0, 10) || 0,
-      cpu: parseInt(sc.resource ?? 0, 10) || 0,
-      memory: parseInt(sc.cache ?? 0, 10) || 0,
-      connection: parseInt(sc.connection ?? 0, 10) || 0,
-      query: parseInt(sc.query ?? 0, 10) || 0
-    };
-    message.success('架构分析完成（后端评分）');
+    const resText = await apiClient.analyzeArchitectureAdvice(Number(selectedInstance.value), perfPayload);
+    analysisResultText.value = typeof resText === 'string' ? resText : String(resText || '');
+    message.success('分析完成');
   } catch (error) {
     message.error(error?.message || '分析失败，请检查后端服务');
   } finally {
@@ -763,19 +744,20 @@ onUnmounted(() => {
 .analysis-result-card {
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  padding: 20px;
   background: #fff;
   border: 1px solid #f0f0f0;
 }
 
-.analysis-result-card h4 {
-  margin-bottom: 16px;
-  color: #262626;
-  font-weight: 600;
-  font-size: 16px;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 8px;
-}
+.analysis-result-card .ant-card-head { padding: 0 12px; }
+.analysis-result-card .ant-card-head-title { color: #000000; font-weight: 600; font-size: 20px; }
+.analysis-result-card .ant-card-body { padding: 12px; }
+
+.plain-text { white-space: pre-wrap; font-size: 20px; line-height: 30px; color: #000000; margin-top: 8px; word-break: break-word; }
+.plain-text a { color: #1677FF; text-decoration: underline; }
+.plain-text .highlight { color: #FF6B00; }
+
+@media (max-width: 768px) { .plain-text { font-size: 20px; line-height: 32px; } }
+@media (max-width: 480px) { .plain-text { font-size: 20px; line-height: 34px; } }
 
 .load-data-btn, .start-analysis-btn {
   min-width: 100px;

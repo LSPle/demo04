@@ -4,7 +4,7 @@
   "description": "数据库优化平台前端 (Vue3)",
   "type": "module",
   "scripts": {
-    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Set-Location ..\\backend; $env:PORT=5000; if (Test-Path .\\.venv\\Scripts\\python.exe) { .\\.venv\\Scripts\\python.exe .\\run.py } elseif (Get-Command py -ErrorAction SilentlyContinue) { py -3 .\\run.py } else { python .\\run.py }\"",
+    "backend": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; [Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Location ..\\backend; $env:PORT=5000; $env:PYTHONIOENCODING='utf-8'; $env:PYTHONUTF8='1'; if (Test-Path .\\.venv\\Scripts\\python.exe) { .\\.venv\\Scripts\\python.exe .\\run.py } elseif (Get-Command py -ErrorAction SilentlyContinue) { py -3 .\\run.py } else { python .\\run.py }\"",
     "frontend": "vite",
     "build": "vite build",
     "preview": "vite preview --port 3000",
