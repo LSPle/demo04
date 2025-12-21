@@ -71,7 +71,7 @@ def list_slowlog(instance_id: int):
     success, result, message = slowlog_service.list_from_table(instance, page=page, page_size=page_size, filters=filters)
     
     if success:
-        # 兼容前端表格字段需求：query、count、avg_time_ms、rows_examined
+        # 返回表格字段：query、count、avg_time_ms、rows_examined
         data = result or {}
         items = list(data.get('items') or [])
         formatted = []
@@ -81,11 +81,12 @@ def list_slowlog(instance_id: int):
                 avg_ms = round(float(q_sec) * 1000, 2)
             except Exception:
                 avg_ms = 0
+            rows_examined = it.get('rows_examined', 0)
             formatted.append({
                 'query': it.get('sql_text') or it.get('query') or '',
                 'count': 1,  # 表抽样为单条记录，次数记为1
                 'avg_time_ms': avg_ms,
-                'rows_examined': it.get('rows_examined', 0),
+                'rows_examined': rows_examined,
             })
         data['items'] = formatted
         return jsonify(data), 200

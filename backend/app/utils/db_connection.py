@@ -24,12 +24,12 @@ class DatabaseConnectionManager:
         self.timeout = 10
     
     # MySQL端口连通性检查：在进行完整的MySQL连接验证之前，可以先用这个方法快速检查网络连通性
-    def _tcp_probe(self, host, port):
-        try:
-            with socket.create_connection((host, port), timeout=self.timeout):
-                return True, "MySQL端口可达"
-        except Exception as e:
-            return False, f"MySQL端口连接失败: {e}"
+    # def _tcp_probe(self, host, port):
+    #     try:
+    #         with socket.create_connection((host, port), timeout=self.timeout):
+    #             return True, "MySQL端口可达"
+    #     except Exception as e:
+    #         return False, f"MySQL端口连接失败: {e}"
 
     # 验证MySQL数据库连接       
     def validate_connection(self, db_type, host, port, username=None, password=None):
@@ -38,6 +38,7 @@ class DatabaseConnectionManager:
     
         if type_key != 'MySQL':
             return False, f"不支持的数据库类型: {db_type}，本项目只支持MySQL数据库"
+        conn = None
         try:
             conn = pymysql.connect(
                 host=host,                          # 数据库服务器地址
@@ -50,12 +51,16 @@ class DatabaseConnectionManager:
                 write_timeout=self.timeout          # 写入超时时间
             )
             conn.ping()
-            conn.close()
-            
             return True, "MySQL连接成功"
             
         except Exception as e:
             return False, f"MySQL连接失败: {e}"
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
     
     # 创建数据库连接
     def create_connection(self, instance, database=None):
@@ -70,8 +75,12 @@ class DatabaseConnectionManager:
         # 确保端口是整数类型
         # 有时候端口可能以字符串形式存储，需要转换
         if not isinstance(port, int):
-            # 如果不是整数，尝试转换；如果转换失败，使用默认值3306
-            port = int(port) if port else 3306
+            # 如果端口有值，就转成整数
+            if port:
+                port = int(port)
+            else:
+                # 如果没值，就用默认端口3306
+                port = 3306
         
         # 创建并返回数据库连接
         conn = pymysql.connect(
@@ -87,16 +96,27 @@ class DatabaseConnectionManager:
     
     # 执行mysql查询
     def execute_query(self, instance, query, database=None):
+        conn = None
+        cursor = None
         try:
             conn = self.create_connection(instance, database)
             cursor = conn.cursor()
             cursor.execute(query)
             result = cursor.fetchall()
-            cursor.close()
-            conn.close()
             return True, result, ""
         except Exception as e:
             return False, None, f"查询失败: {str(e)}"
+        finally:
+            try:
+                if cursor:
+                    cursor.close()
+            except Exception:
+                pass
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
 
 db_connection_manager = DatabaseConnectionManager()

@@ -1,0 +1,17 @@
+__int__.py:
+    # 注入app到监控服务，避免后台线程的上下文错误（保留手动检测服务的上下文支持）打算删除
+    from .services.instance_monitor_service import instance_monitor_service
+    instance_monitor_service.set_app(app)
+
+
+instance_monitor_service.py
+    # 注入 Flask 应用实例，用于在无上下文的线程中创建上下文，这个暂时不用管，打算删除（在__init__.py里被调用）
+    def set_app(self, app):
+        self.app = app
+
+
+db_connection.py：
+
+ 中的validate_connection()函数，直接引入并用instance_monitor_service.py中的check_instance_connection_info函数替代
+
+论文中要安装vue-router

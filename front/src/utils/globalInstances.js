@@ -1,7 +1,7 @@
 import apiClient from './apiClient';
 
-// 全局实例状态管理 - 超简化版本
-// 适合大学生项目的简单状态管理方案
+// 全局实例状态管理 
+
 
 // 全局状态对象
 window.globalInstances = {
@@ -21,11 +21,12 @@ window.globalInstances = {
  */
 export async function loadInstances(showMessage = false) {
   // 单飞：已有加载任务时复用同一个Promise，避免并发导致返回false
+  // 防止重复请求，避免重复加载数据
   if (window.globalInstances.loadingPromise) {
     try {
       await window.globalInstances.loadingPromise;
       return true;
-    } catch (err) {
+    } catch (error) {
       return false;
     }
   }
@@ -45,12 +46,16 @@ export async function loadInstances(showMessage = false) {
 
       // 2. 获取实例状态
       const statusRes = await apiClient.checkInstanceStatus();
-      const { statuses = [] } = statusRes || {};
+      // 获取状态列表，如果没获取到（undefined或null）就给一个空数组，防止报错
+      let statuses = [];
+      if (statusRes && statusRes.statuses) {
+        statuses = statusRes.statuses;
+      }
 
       // 3. 构建状态映射
       const statusMap = {};
       statuses.forEach(status => {
-        if (status && typeof status.id !== 'undefined') {
+        if (status && typeof status.id != null) {
           statusMap[status.id] = Boolean(status.ok);
         }
       });
@@ -83,13 +88,14 @@ export async function loadInstances(showMessage = false) {
     }
   })();
 
-  // 记录当前加载任务Promise（供并发复用）
+  // 记录当前加载任务Promise
   window.globalInstances.loadingPromise = loadingTask;
 
+  // 确保加载任务完成后返回结果（await 用来卡住后续代码执行，直到加载完成）
   try {
     await loadingTask;
     return true;
-  } catch (err) {
+  } catch (error) {
     return false;
   }
 }

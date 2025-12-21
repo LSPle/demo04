@@ -54,61 +54,33 @@ import globalInstances from '../utils/globalInstances';
 let cacheClearedHandler = null;
 
 const logsLoading = ref(false);
-const analysisLoading = ref(false);
 const instanceOptions = ref([]);
 const selectedInstance = ref('');
 const logs = ref([]);
 const analysis = ref(null);
 
-// 简化列定义：依赖归一化后的数据字段，避免在列中写逻辑
 const columns = [
   { title: 'SQL', dataIndex: 'query', key: 'query', ellipsis: true },
   { title: '次数', dataIndex: 'count', key: 'count', width: 80 },
-  { title: '平均耗时(ms)', dataIndex: 'avg_latency_ms', key: 'avg_latency_ms', width: 140 },
-  { title: '扫描行数', dataIndex: 'rows_examined_avg', key: 'rows_examined_avg', width: 120 },
+  { title: '平均耗时(ms)', dataIndex: 'avg_time_ms', key: 'avg_time_ms', width: 140 },
+  { title: '扫描行数', dataIndex: 'rows_examined', key: 'rows_examined', width: 120 },
 ];
 
 function pretty(obj) { try { return JSON.stringify(obj, null, 2); } catch { return String(obj); } }
 
-function toNumber(val, def = 0) {
-  const n = Number(val);
-  return Number.isFinite(n) ? n : def;
-}
-
-function round2(val) {
-  const n = Number(val);
-  if (!Number.isFinite(n)) return 0;
-  return Math.round(n * 100) / 100;
-}
-
 function normalizeItem(r, idx) {
-  // 原始字段先展开，后续归一化字段覆盖，避免被原值反向覆盖
-  const base = { ...r };
-
-  const query = base.query ?? base.sql ?? base.sql_text ?? '-';
-  // 次数：优先 count，其次 count_star，最后默认 1
-  let count = Number(base.count);
-  if (!Number.isFinite(count)) count = Number(base.count_star);
-  if (!Number.isFinite(count)) count = 1;
-
-  let avgMs = base.avg_latency_ms;
-  if (!Number.isFinite(Number(avgMs))) {
-    const qsec = base.query_time; // 秒
-    const seconds = toNumber(qsec, 0);
-    avgMs = round2(seconds * 1000);
-  }
-
-  // 扫描行数：直接使用 rows_examined_avg，如果无效则默认 0
-  let rowsExamined = Number(base.rows_examined_avg);
-  if (!Number.isFinite(rowsExamined)) rowsExamined = 0;
-
+  const base = r && typeof r === 'object' ? r : {};
+  const query = base.query || '-';
+  const countRaw = Number(base.count);
+  const avgTimeRaw = Number(base.avg_time_ms);
+  const rowsExaminedRaw = Number(base.rows_examined);
   return {
     ...base,
     _rowKey: idx,
     query,
-    count,
-    avg_latency_ms: round2(avgMs),
-    rows_examined_avg: rowsExamined,
+    count: Number.isFinite(countRaw) ? countRaw : 1,
+    avg_time_ms: Number.isFinite(avgTimeRaw) ? avgTimeRaw : 0,
+    rows_examined: Number.isFinite(rowsExaminedRaw) ? rowsExaminedRaw : 0,
   };
 }
 
@@ -148,14 +120,11 @@ async function loadSlowlogs() {
 async function analyzeSlowlog() {
   if (!selectedInstance.value) { message.warning('请选择实例'); return; }
   try {
-    analysisLoading.value = true;
     const res = await apiClient.analyzeSlowlog(Number(selectedInstance.value));
     analysis.value = res;
     message.success('慢日志分析完成');
   } catch (e) {
     analysis.value = null;
-  } finally {
-    analysisLoading.value = false;
   }
 }
 

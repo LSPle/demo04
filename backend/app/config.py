@@ -18,8 +18,7 @@ class Config:
     MYSQL_NAME = "chhgraduationdesign"
 
     # 基本校验：避免运行时无效连接信息
-    if not all([MYSQL_USER, MYSQL_PASSWORD, MYSQL_HOST, MYSQL_NAME]):
-        raise RuntimeError("请检查 Config 中的 MySQL 配置")
+
 
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+pymysql://{quote_plus(MYSQL_USER)}:{quote_plus(MYSQL_PASSWORD)}"

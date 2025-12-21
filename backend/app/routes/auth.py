@@ -14,14 +14,14 @@ auth_bp = Blueprint('auth', __name__)
 def register():
     data = request.get_json()
     if not data:
-        return jsonify({'message': 'No data provided'}), 400
+        return jsonify({'message': '信息不能为空'}), 400
     
     username = data.get('username')
     password = data.get('password')
     
     # 检查用户名和密码是否为空
     if not username or not password:
-        return jsonify({'message': 'username and password are required'}), 400
+        return jsonify({'message': '账号密码不能为空'}), 400
     
     # 去除空格
     username = username.strip()
@@ -30,28 +30,28 @@ def register():
     # 检查用户是否已存在
     existing_user = UserInfo.query.filter_by(user_id=username).first()
     if existing_user:
-        return jsonify({'message': 'username already exists'}), 400
+        return jsonify({'message': '用户已经存在'}), 400
 
     # 创建新用户
     new_user = UserInfo(user_id=username, password=password)
     db.session.add(new_user)
     db.session.commit()
 
-    return jsonify({'message': 'registered successfully', 'user': new_user.to_public()}), 201
+    return jsonify({'message': "注册成功", 'user': new_user.to_public()}), 201
 
 
 @auth_bp.post('/login')
 def login():
     data = request.get_json()
     if not data:
-        return jsonify({'message': 'No data provided'}), 400
+        return jsonify({'message': '信息不能为空'}), 400
     
     username = data.get('username')
     password = data.get('password')
 
     # 检查用户名和密码是否为空
     if not username or not password:
-        return jsonify({'message': 'username and password are required'}), 400
+        return jsonify({'message': '账号密码不能为空'}), 400
     
     # 去除空格
     username = username.strip()
@@ -60,13 +60,13 @@ def login():
     # 查找用户
     user = UserInfo.query.filter_by(user_id=username).first()
     if not user:
-        return jsonify({'message': 'invalid credentials'}), 401
+        return jsonify({'message': '用户不存在'}), 401
     
     # 验证密码
     if user.password != password:
-        return jsonify({'message': 'invalid credentials'}), 401
+        return jsonify({'message': '账号密码错误'}), 401
 
-    # 生成token
+    # 生成token，flask_jwt_extended扩展
     access_token = create_access_token(identity=user.user_id)
     
 
@@ -78,7 +78,7 @@ def login():
 def logout():
 
     
-    return jsonify({'message': 'logged out'}), 200
+    return jsonify({'message': '登出成功'}), 200
 
 
 @auth_bp.get('/me')
@@ -88,6 +88,6 @@ def me():
     user = UserInfo.query.filter_by(user_id=user_id).first()
     
     if not user:
-        return jsonify({'message': 'user not found'}), 404
+        return jsonify({'message': '用户不存在'}), 404
     
     return jsonify({'user': user.to_public()}), 200

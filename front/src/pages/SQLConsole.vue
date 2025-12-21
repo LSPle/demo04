@@ -11,29 +11,27 @@
       <a-row :gutter="16">
         <!-- 左侧：实例选择 + 数据库树 -->
         <a-col :xs="24" :md="8">
-          <a-card class="control-card">
-            <template #title>
-              <div class="card-title">数据库/表结构</div>
-            </template>
+          <a-card class="control-card sidebar-card" title="数据库">
             <template #extra>
-              <a-button size="small" @click="handleRefreshDatabases" :loading="loadingDatabases" class="refresh-db-btn">
+              <a-button size="small" @click="handleRefreshDatabases" :loading="loadingDatabases" class="refresh-db-btn" type="primary">
                 刷新
               </a-button>
             </template>
-
+            <!-- 选择实例 -->
             <div class="instance-selector">
               <a-select 
                 v-model:value="selectedInstance" 
                 placeholder="选择实例" 
                 @change="handleInstanceChange"
                 class="instance-select"
+                style="width: 300px"
               >
                 <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
                   {{ opt.label }}
                 </a-select-option>
               </a-select>
             </div>
-
+            <!-- 数据库树 -->
             <div class="sidebar-content">
               <div v-if="!selectedInstance" class="empty-state">
                 <div class="empty-icon">📁</div>
@@ -55,6 +53,7 @@
                     </span>
                     <span class="database-name">{{ database.name }}</span>
                   </div>
+                  <!-- 列表 -->
                   <div v-if="expandedDatabases.includes(database.name)" class="table-list">
                     <div v-if="database.loading" class="table-loading">
                       <a-spin size="small" />
@@ -70,7 +69,6 @@
                       >
                         <span class="table-icon">📋</span>
                         <span class="table-name">{{ table.name }}</span>
-                        <span class="table-type">{{ table.type || '表' }}</span>
                       </div>
                     </div>
                     <div v-else class="no-tables">
@@ -85,10 +83,7 @@
 
         <!-- 右侧：SQL编辑器 -->
         <a-col :xs="24" :md="16">
-          <a-card class="control-card">
-            <template #title>
-              <div class="card-title">SQL编辑器</div>
-            </template>
+          <a-card class="control-card editor-card" title="SQL编辑器">
             <div class="editor-section">
               <div class="editor-header">
                 <div class="editor-actions">
@@ -96,22 +91,24 @@
                     v-model:value="selectedDatabase" 
                     placeholder="选择数据库"
                     class="database-select"
-                    size="small"
+                    size="large"
+                    @change="handleDatabaseSelect"
+                    style="width: 300px"
                   >
                     <a-select-option v-for="db in databaseList" :key="db.name" :value="db.name">
                       {{ db.name }}
                     </a-select-option>
                   </a-select>
-                  <a-button @click="resetForm" class="reset-btn" size="small">重置</a-button>
-                  <a-button type="primary" @click="executeSql" :loading="loading" size="small" class="execute-btn">
+                  <a-button @click="resetForm" class="reset-btn" size="large">重置</a-button>
+                  <a-button type="primary" @click="executeSql" :loading="loading" class="execute-btn" size="large">
                     执行SQL
                   </a-button>
                 </div>
               </div>
+              <!-- 输入的SQL内容 -->
               <div class="editor-content">
                 <a-textarea 
                   v-model:value="sql" 
-                  :rows="12" 
                   placeholder="请输入SQL语句..."
                   class="sql-editor"
                 />
@@ -148,6 +145,8 @@
               <div class="empty-text">暂无执行结果</div>
             </div>
             <div v-else class="result-data">
+
+              <!-- 展示表格数据或者操作反馈(文本结果) -->
               <div v-if="resultTable.columns.length" class="table-result">
                 <a-table 
                   :columns="resultTable.columns" 
@@ -159,11 +158,15 @@
                 />
               </div>
               <div v-else class="text-result">
+                <!-- pretty() 是一个数据美化格式化函数 -->
+                 <!-- <pre/> 完全保留原始文本格式 -->
                 <pre>{{ pretty(result) }}</pre>
               </div>
             </div>
           </div>
+          <!-- 历史记录 -->
           <div v-if="activeTab === 'history'" class="history-panel">
+
             <div v-if="!executionHistory.length" class="empty-result">
               <div class="empty-icon">📝</div>
               <div class="empty-text">暂无执行历史</div>
@@ -187,16 +190,17 @@
                       <span class="history-status" :class="item.success ? 'success' : 'error'">
                         {{ item.success ? '成功' : '失败' }}
                       </span>
-                      <span v-if="item.duration" class="history-duration">{{ item.duration }}ms</span>
                     </div>
                     <div class="history-actions">
                       <a-button size="small" @click="rerunSql(item)" class="rerun-btn">重新执行</a-button>
                       <a-button size="small" @click="deleteSingleHistory(item.id)" class="delete-btn">删除</a-button>
                     </div>
                   </div>
+                  <!-- 执行的SQL语句 -->
                   <div class="history-sql">
                     <pre>{{ item.sql }}</pre>
                   </div>
+                  <!-- 执行错误信息 -->
                   <div v-if="item.error" class="history-error">
                     <span class="error-label">错误信息：</span>
                     <span class="error-message">{{ item.error }}</span>
@@ -212,7 +216,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
+// 临时提醒
 import { message } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
 import globalInstances from '../utils/globalInstances';
@@ -228,22 +233,26 @@ const expandedDatabases = ref([]);
 const sql = ref('');
 const result = ref(null);
 const resultTable = ref({ columns: [], rows: [] });
+// 默认显示执行结果
 const activeTab = ref('result');
 
 // 执行历史相关状态
 const executionHistory = ref([]);
 const maxHistorySize = 50; // 最大历史记录数量
 
+// 格式化 JSON 对象以便友好展示
 function pretty(obj) {
   try { return JSON.stringify(obj, null, 2); } catch { return String(obj); }
 }
 
+// 获取并加载所有可用的数据库实例列表
 async function getInstanceList() {
   try {
     await globalInstances.ensureInstancesLoaded();
     const runningInstances = globalInstances.getRunningInstances();
     instanceOptions.value = runningInstances.map(i => ({
       value: String(i.id),
+      // 下拉菜单展示的文本，包含实例名称、数据库类型、主机地址和端口号
       label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
     }));
   } catch (e) {
@@ -252,7 +261,8 @@ async function getInstanceList() {
   }
 }
 
-// 监听全局缓存清理事件，清空本地选项并刷新
+
+// 清理下拉菜单，获取最新正常运行的实例列表，globalInstances.js中调用
 function handleInstancesCacheCleared() {
   instanceOptions.value = [];
   getInstanceList();
@@ -268,11 +278,13 @@ onMounted(() => {
   loadHistoryFromLocal(); // 加载历史记录
 });
 
+// 根据实例ID获取该实例下的所有数据库
 async function getDatabaseList(instanceId) {
   if (!instanceId) return;
   try {
     loadingDatabases.value = true;
     const data = await apiClient.getInstanceDatabases(instanceId);
+    // console.log('获取数据库列表成功:', data);
     const databases = data?.databases || [];
     databaseList.value = databases.map(db => ({
       name: db,
@@ -287,6 +299,7 @@ async function getDatabaseList(instanceId) {
   }
 }
 
+// 获取指定数据库下的所有表结构
 async function getTableList(databaseName) {
   if (!selectedInstance.value || !databaseName) return;
   
@@ -299,8 +312,9 @@ async function getTableList(databaseName) {
     const res = await apiClient.getDatabaseTables(Number(selectedInstance.value), databaseName);
     const tables = Array.isArray(res?.tables) ? res.tables : (Array.isArray(res) ? res : []);
     database.tables = tables.map(t => {
-      if (typeof t === 'string') return { name: t, type: '表' };
-      return { name: t?.name ?? String(t), type: t?.type ?? '表' };
+      // 简化处理：无论后端返回字符串还是对象，统一提取表名
+      const name = (typeof t === 'object' && t !== null) ? (t.name || String(t)) : String(t);
+      return { name };
     });
   } catch (e) {
     database.tables = [];
@@ -310,6 +324,7 @@ async function getTableList(databaseName) {
   }
 }
 
+// 处理实例切换事件，重置相关状态并加载新数据
 function handleInstanceChange(val) {
   selectedDatabase.value = '';
   selectedTable.value = '';
@@ -317,12 +332,24 @@ function handleInstanceChange(val) {
   if (val) getDatabaseList(val);
 }
 
+// 刷新当前选中实例的数据库列表
 function handleRefreshDatabases() {
   if (selectedInstance.value) {
     getDatabaseList(selectedInstance.value);
   }
 }
 
+// 下拉框选择数据库时，联动左侧展开（互斥模式：自动关闭其他数据库）
+function handleDatabaseSelect(databaseName) {
+  if (databaseName) {
+    // 1. 重置展开数组，仅保留当前选中的数据库（实现互斥）
+    expandedDatabases.value = [databaseName];
+    // 2. 加载该数据库的表列表
+    getTableList(databaseName);
+  }
+}
+
+// 切换左侧树形菜单中数据库的展开/折叠状态
 function handleToggleDatabase(databaseName) {
   const index = expandedDatabases.value.indexOf(databaseName);
   if (index > -1) {
@@ -333,8 +360,11 @@ function handleToggleDatabase(databaseName) {
   }
 }
 
+// 选中具体的表，自动生成查询语句
 function handleSelectTable(databaseName, tableName) {
+  // 它直接控制了左侧菜单中哪一项变蓝（高亮）
   selectedTable.value = `${databaseName}.${tableName}`;
+  //它确保了当你点击执行 SQL 时，后端知道是在哪个库里执行。
   selectedDatabase.value = databaseName;
   // 自动生成查询语句
   sql.value = `SELECT * FROM ${tableName} LIMIT 100;`;
@@ -351,6 +381,7 @@ function resetForm() {
   databaseList.value = [];
 }
 
+//数据转换为表格所需格式
 function toTable(res) {
   const rows = Array.isArray(res?.rows) ? res.rows : (Array.isArray(res?.data) ? res.data : []);
   if (!rows.length) return { columns: [], rows: [] };
@@ -362,32 +393,6 @@ function toTable(res) {
   return { columns, rows: withKey };
 }
 
-// 添加历史记录的函数
-function addToHistory(sqlText, result, error = null) {
-  const historyItem = {
-    id: Date.now() + Math.random(), // 简单的唯一ID
-    sql: sqlText,
-    database: selectedDatabase.value,
-    instance: selectedInstance.value,
-    instanceName: instanceOptions.value.find(opt => opt.value === selectedInstance.value)?.label || '',
-    timestamp: new Date(),
-    success: !error,
-    result: error ? null : result,
-    error: error,
-    duration: null // 可以后续添加执行时间统计
-  };
-  
-  // 添加到历史记录开头
-  executionHistory.value.unshift(historyItem);
-  
-  // 限制历史记录数量
-  if (executionHistory.value.length > maxHistorySize) {
-    executionHistory.value = executionHistory.value.slice(0, maxHistorySize);
-  }
-  
-  // 保存到本地存储
-  saveHistoryToLocal();
-}
 
 // 保存历史记录到本地存储
 function saveHistoryToLocal() {
@@ -417,13 +422,14 @@ function loadHistoryFromLocal() {
   }
 }
 
+// 执行 SQL 语句的主函数，处理请求和结果
 async function executeSql() {
   if (!selectedInstance.value) { message.warning('请选择实例'); return; }
   if (!selectedDatabase.value) { message.warning('请选择数据库'); return; }
+  //trim() 方法用于移除字符串首尾的空格
   if (!sql.value.trim()) { message.warning('请输入 SQL'); return; }
   
   const sqlText = sql.value.trim();
-  const startTime = Date.now();
   
   try {
     loading.value = true;
@@ -432,10 +438,11 @@ async function executeSql() {
       database: selectedDatabase.value,
       sql: sqlText
     });
-    
-    const duration = Date.now() - startTime;
+    //没有表格数据就显示result的内容，比如执行结果
     result.value = res;
+    //展示内容为表格形式
     resultTable.value = toTable(res);
+    //切换到结果页
     activeTab.value = 'result';
     
     // 添加成功的执行记录到历史
@@ -448,8 +455,7 @@ async function executeSql() {
       timestamp: new Date(),
       success: true,
       result: res,
-      error: null,
-      duration: duration
+      error: null
     };
     
     executionHistory.value.unshift(historyItem);
@@ -460,7 +466,6 @@ async function executeSql() {
     
     message.success('执行完成');
   } catch (e) {
-    const duration = Date.now() - startTime;
     result.value = null;
     resultTable.value = { columns: [], rows: [] };
     
@@ -474,8 +479,7 @@ async function executeSql() {
       timestamp: new Date(),
       success: false,
       result: null,
-      error: e.message || '执行失败',
-      duration: duration
+      error: e.message || '执行失败'
     };
     
     executionHistory.value.unshift(historyItem);
@@ -489,34 +493,16 @@ async function executeSql() {
   }
 }
 
-onMounted(() => {
-  getInstanceList();
-  loadHistoryFromLocal(); // 加载历史记录
-});
-
 // 格式化时间显示
 function formatTime(timestamp) {
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diff = now - date;
-  
-  // 如果是今天
-  if (diff < 24 * 60 * 60 * 1000 && date.getDate() === now.getDate()) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  }
-  
-  // 如果是昨天或更早
-  return date.toLocaleString('zh-CN', { 
-    month: '2-digit', 
-    day: '2-digit', 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  });
+  return new Date(timestamp).toLocaleString('zh-CN');
 }
 
 // 重新执行SQL
 function rerunSql(historyItem) {
   // 设置实例和数据库
+  console.log("看看历史的item", historyItem);
+  
   selectedInstance.value = historyItem.instance;
   selectedDatabase.value = historyItem.database;
   
@@ -607,7 +593,6 @@ function clearHistory() {
 
 .reset-btn {
   border-radius: 6px;
-  height: 36px;
 }
 
 /* 控制区与卡片样式，与配置优化页面保持一致 */
@@ -618,6 +603,20 @@ function clearHistory() {
 .control-card {
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.editor-card {
+  height: 510px !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-card :deep(.ant-card-body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许子元素在固定高度内正确收缩 */
 }
 
 .instance-selector {
@@ -644,12 +643,24 @@ function clearHistory() {
 }
 
 .sidebar-content {
-  flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px;
+  height: 100%;
+}
+
+.sidebar-card {
+  height: 510px !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-card :deep(.ant-card-body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  max-height: 50vh;
 }
 
 .empty-state, .loading-state {
@@ -782,7 +793,8 @@ function clearHistory() {
 .editor-section {
   display: flex;
   flex-direction: column;
-  height: 400px;
+  flex: 1;
+  min-height: 0;
 }
 
 .editor-header {
@@ -802,14 +814,12 @@ function clearHistory() {
   display: flex;
   gap: 12px;
   align-items: center;
+  
 }
 
-.database-select {
-  min-width: 150px;
-}
+
 
 .database-select :deep(.ant-select-selector) {
-  height: 28px !important;
   border-radius: 6px !important;
 }
 
@@ -820,20 +830,28 @@ function clearHistory() {
 .editor-content {
   flex: 1;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* 允许编辑器在卡片固定高度内撑满剩余空间 */
 }
 
 .sql-editor {
-  height: 100%;
+  flex: 1;
+  height: 100% !important;
   border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 20px !important;
+  resize: none;
 }
 
 .sql-editor :deep(.ant-input) {
   height: 100%;
   border: 1px solid #d9d9d9;
   border-radius: 8px;
-  font-family: 'Courier New', monospace;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 20px !important;
+  line-height: 1.5;
+  font-weight: 500;
 }
 
 /* 数据展示区卡片样式，与配置优化页面保持一致 */
@@ -1040,12 +1058,6 @@ function clearHistory() {
 .history-status.error {
   color: #ff4d4f;
   background: #fff2f0;
-}
-
-.history-duration {
-  font-size: 11px;
-  color: #999;
-  font-family: monospace;
 }
 
 .history-actions {

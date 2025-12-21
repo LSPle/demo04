@@ -64,7 +64,5 @@ function onMenuClick({ key }) {
   font-weight: 600;
 }
 
-.sidebar-menu {
-  /* 预留：如需自定义菜单外层样式，可在此添加 */
-}
+
 </style>

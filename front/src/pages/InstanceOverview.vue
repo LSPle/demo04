@@ -75,6 +75,7 @@ import apiClient from '../utils/apiClient';
 import { message } from 'ant-design-vue';
 import globalInstances from '../utils/globalInstances';
 
+// 记号
 let cacheClearedHandler = null;
 
 // 页面状态
@@ -82,8 +83,8 @@ const loading = ref(false);  // 加载状态
 const instances = ref([]);   // 实例列表数据
 const refreshing = ref(false); // 刷新按钮禁用状态
 
-// 动态状态映射：{ [id]: boolean }
-const statusMap = reactive({});
+// 动态状态映射：
+const statusMap = ref({});
 
 // 表格列配置
 const columns = [
@@ -121,7 +122,9 @@ function getStatusTextByOk(ok) {
 // 使用全局状态管理加载实例数据
 async function loadInstancesData(showMessage = false) {
   try {
+    //加载中状态
     loading.value = true;
+    // 到后台获取实例数据
     const success = await globalInstances.loadInstances(showMessage);
     
     if (success) {
@@ -130,8 +133,7 @@ async function loadInstancesData(showMessage = false) {
       const globalStatusMap = globalInstances.getStatusMap();
       
       // 更新本地状态映射
-      Object.keys(statusMap).forEach(k => delete statusMap[k]);
-      Object.assign(statusMap, globalStatusMap);
+      statusMap.value = globalStatusMap;
       
       // 计算统计数据
       const allInstances = globalInstances.getAllInstances();
@@ -141,7 +143,9 @@ async function loadInstancesData(showMessage = false) {
       runningCount.value = runningInstances.length;
       errorCount.value = allInstances.length - runningInstances.length;
       
-      if (showMessage) message.success('数据加载成功');
+      if (showMessage) {
+        message.success('数据加载成功');
+      }
     }
   } catch (error) {
     instances.value = [];
@@ -173,6 +177,8 @@ onMounted(async () => {
   cacheClearedHandler = () => {
     loadInstancesData(false);
   };
+  // 注册一个名为 instances-cache-cleared 的全局事件监听器
+  // 当用户在别的标签页触发 instances-cache-cleared 事件，当前页立刻收到通知并重新拉数据。
   window.addEventListener('instances-cache-cleared', cacheClearedHandler);
 });
 

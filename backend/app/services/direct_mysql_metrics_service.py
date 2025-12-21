@@ -33,12 +33,11 @@ class DirectMySQLMetricsService:
     #执行SQL查询并返回结果
     def execute_query(self, conn: pymysql.Connection, query: str):       
         try:
-            cursor = conn.cursor()
-            cursor.execute(query)
-            columns = [desc[0] for desc in cursor.description] 
-            rows = cursor.fetchall()
-            cursor.close()
-            return {'columns': columns, 'rows': rows}
+            with conn.cursor() as cursor:
+                cursor.execute(query)
+                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                rows = cursor.fetchall()
+                return {'columns': columns, 'rows': rows}
         except Exception as e:
             logger.error(f"查询执行失败: {query}, 错误: {e}")
             return None

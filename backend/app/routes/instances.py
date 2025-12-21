@@ -53,7 +53,7 @@ def validate_instance_data(data, is_update=False):
 # 获取实例列表
 @instances_bp.get('/instances')
 def list_instances():
-    
+    # args只读字典，获取用户ID
     user_id = request.args.get('userId')
     # 获取实例
     instances = get_user_instances_query(user_id).all()
@@ -166,7 +166,7 @@ def update_instance(instance_id):
         # 显式忽略任何传入的 status
         if 'status' in data:
             pass
-        
+        # 新增、删除、修改需要使用提交
         db.session.commit()
         
         return jsonify({

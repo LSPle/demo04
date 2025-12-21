@@ -5,7 +5,7 @@
       <div class="header-content">
         <div class="title-area">
           <h2 class="config-title">实例管理</h2>
-          <p class="config-desc">添加、编辑、删除数据库实例，支持实时状态检测</p>
+          <p class="config-desc">添加、编辑、删除数据库实例</p>
         </div>
         <div class="button-area">
           <a-space>
@@ -19,9 +19,9 @@
     <!-- 表格 -->
     <div class="table-container">
       <a-table :columns="columns" :data-source="instances" :loading="loading" rowKey="id">
-        <template #bodyCell="{ column, record }">
+        <template v-slot:bodyCell="{ column, record }">
           <template v-if="column.key === 'instanceName'">
-            <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <div class="instance-name-cell">
               <span>{{ record.instanceName }}</span>
             </div>
           </template>
@@ -64,10 +64,11 @@
       class="instance-modal"
     >
       <a-form layout="vertical" class="instance-form">
+        <!-- required必选 -->
         <a-form-item label="实例名称" required>
           <a-input 
             v-model:value="form.instanceName" 
-            placeholder="例如：生产库" 
+            placeholder="请输入实例名称" 
             size="large"
           />
         </a-form-item>
@@ -117,7 +118,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { message } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
 import globalInstances from '../utils/globalInstances';
@@ -129,7 +130,7 @@ const instances = ref([]);
 const refreshing = ref(false); // 刷新按钮禁用状态
 
 // 动态状态映射（id -> ok）
-const statusMap = reactive({});
+const statusMap = ref({});
 
 const columns = [
   { title: '实例名称', key: 'instanceName', width: 300 },
@@ -152,14 +153,13 @@ function getStatusTextByOk(ok) {
 
 function formatDateTime(time) {
   if (!time) return '-';
-  try {
-    const val = typeof time === 'string' ? time.replace(' ', 'T') : time;
-    const d = new Date(val);
-    if (isNaN(d.getTime())) return String(time);
-    return d.toLocaleString('zh-CN');
-  } catch {
-    return String(time);
+  const d = new Date(time);
+  // 如果转换失败（得到的时间戳不是数字），直接返回原数据
+  if (isNaN(d.getTime())) {
+    return time;
   }
+  // 转换成功，返回本地格式的时间字符串（如：2023/12/7 10:00:00）
+  return d.toLocaleString();
 }
 
 // 使用全局状态管理加载实例数据
@@ -174,12 +174,12 @@ async function loadInstancesData(showMessage = false) {
       const globalStatusMap = globalInstances.getStatusMap();
       
       // 更新本地状态映射
-      Object.keys(statusMap).forEach(k => delete statusMap[k]);
-      Object.assign(statusMap, globalStatusMap);
+      statusMap.value = globalStatusMap;
       
       if (showMessage) message.success('数据加载成功');
     }
   } catch (error) {
+    // 清空表格数据
     instances.value = [];
     if (showMessage) message.error(error.message || '加载数据失败');
   } finally {
@@ -204,7 +204,7 @@ async function refresh() {
 const formVisible = ref(false);
 const isEdit = ref(false);
 const currentId = ref(null);
-const form = reactive({
+const form = ref({
   instanceName: '',
   dbType: 'mysql',
   host: '',
@@ -216,24 +216,28 @@ const form = reactive({
 function showAddDialog() {
   isEdit.value = false;
   currentId.value = null;
-  form.instanceName = '';
-  form.dbType = 'mysql';
-  form.host = '';
-  form.port = 3306;
-  form.username = '';
-  form.password = '';
+  form.value = {
+    instanceName: '',
+    dbType: 'mysql',
+    host: '',
+    port: 3306,
+    username: '',
+    password: ''
+  };
   formVisible.value = true;
 }
 
 function showEditDialog(record) {
   isEdit.value = true;
   currentId.value = record.id;
-  form.instanceName = record.instanceName || '';
-  form.dbType = (record.dbType || 'mysql').toLowerCase();
-  form.host = record.host || '';
-  form.port = record.port || 3306;
-  form.username = record.username || '';
-  form.password = record.password || '';
+  form.value = {
+    instanceName: record.instanceName,
+    dbType: record.dbType.toLowerCase(),
+    host: record.host,
+    port: record.port,
+    username: record.username,
+    password: record.password
+  };
   formVisible.value = true;
 }
 
@@ -241,8 +245,9 @@ function hideDialog() {
   formVisible.value = false;
 }
 
+// 保存实例数据
 async function saveInstanceData() {
-  if (!form.instanceName || !form.host || !form.port || !form.username || !form.password) {
+  if (!form.value.instanceName || !form.value.host || !form.value.port || !form.value.username || !form.value.password) {
     message.warning('请完整填写表单');
     return;
   }
@@ -251,12 +256,12 @@ async function saveInstanceData() {
     // 修复字段名映射：前端使用instanceName，后端期望name
     // 修复数据库类型大小写：前端使用mysql，后端期望MySQL
     const payload = {
-      name: form.instanceName,  // 映射字段名
-      host: form.host,
-      port: form.port,
-      username: form.username,
-      password: form.password,
-      type: form.dbType === 'mysql' ? 'MySQL' : form.dbType  // 修复大小写
+      name: form.value.instanceName,  // 映射字段名
+      host: form.value.host,
+      port: form.value.port,
+      username: form.value.username,
+      password: form.value.password,
+      type: form.value.dbType === 'mysql' ? 'MySQL' : form.value.dbType  // 修复大小写
     };
     if (isEdit.value && currentId.value != null) {
       await apiClient.updateInstance(currentId.value, payload);
@@ -312,6 +317,13 @@ onUnmounted(() => {
 
 <style scoped>
 /* 实例管理页面样式 */
+.instance-name-cell {
+  display: flex; 
+  align-items: center; 
+  justify-content: center; 
+  gap: 6px;
+}
+
 .management-container {
   background: none;
   padding: 0;

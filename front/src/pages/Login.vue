@@ -20,9 +20,9 @@
             placeholder="用户名"
             size="large"
           >
-            <template #prefix>
+            <!-- <template #prefix>
               <span>👤</span>
-            </template>
+            </template> -->
           </a-input>
         </a-form-item>
 
@@ -36,9 +36,9 @@
             placeholder="密码"
             size="large"
           >
-            <template #prefix>
+            <!-- <template #prefix>
               <span>🔒</span>
-            </template>
+            </template> -->
           </a-input-password>
         </a-form-item>
 
@@ -66,7 +66,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue';
+import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from 'ant-design-vue';
 import apiClient from '../utils/apiClient';
@@ -77,7 +77,7 @@ const router = useRouter();
 const isLogin = ref(true);
 
 // 表单数据
-const form = reactive({
+const form = ref({
   username: '',
   password: ''
 });
@@ -86,8 +86,8 @@ const form = reactive({
 const switchMode = () => {
   isLogin.value = !isLogin.value;
   // 清空表单
-  form.username = '';
-  form.password = '';
+  form.value.username = '';
+  form.value.password = '';
 };
 
 // 处理表单提交
@@ -98,13 +98,6 @@ const handleSubmit = async (values) => {
       const result = await apiClient.login(values.username, values.password);
       
       if (result.access_token) {
-        // 保存登录信息
-        localStorage.setItem('access_token', result.access_token);
-        // 使用后端返回的用户ID，避免与用户名混淆
-        if (result?.user?.id) {
-          localStorage.setItem('userId', String(result.user.id));
-        }
-        
         message.success('登录成功！');
         router.push('/overview');
       } else {
@@ -114,7 +107,7 @@ const handleSubmit = async (values) => {
       // 注册
       const result = await apiClient.register(values.username, values.password);
       
-      if (result.message === 'registered successfully') {
+      if (result.message === '注册成功') {
         message.success('注册成功！请登录');
         // 切换到登录模式
         isLogin.value = true;

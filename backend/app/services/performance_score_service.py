@@ -48,27 +48,19 @@ def compute_scores(performance: Dict[str, Any]):
     cur_conn = to_num(performance.get('currentConnections'), 0)    # 当前连接数
     max_conn = to_num(performance.get('maxConnections'), 1000)     # 最大连接数，默认1000
     conn_ratio = 0.0 if max_conn <= 0 else cur_conn / max_conn    # 连接占用比例
-    conn_base = 95.0 - conn_ratio * 60.0                          # 基础连接分：占满时约35分，空闲时约95分
+    conn_base = 100.0 - conn_ratio * 60.0                          # 基础连接分：占满时40分，空闲时100分
     lock_waits = to_num(performance.get('lockWaits'), 0)           # 锁等待次数
     deadlocks = to_num(performance.get('deadlocks'), 0)            # 死锁次数
-    conn_penalty = min(lock_waits / 10.0, 15.0) + min(deadlocks * 5.0, 20.0)  # 连接扣分：锁等待最多扣15分，死锁最多扣20分
+    conn_penalty = min(lock_waits / 10.0, 20.0) + min(deadlocks * 5.0, 20.0)  # 连接扣分：锁等待最多扣20分，死锁最多扣20分
     connection_score = clamp_value(conn_base - conn_penalty)       # 连接得分 = 基础分 - 扣分
 
-    # 查询分（平均耗时和慢查询比例影响分数）
-    avg_ms = to_num(performance.get('avgQueryTime'), 0)      # 平均查询时间（毫秒）
-    slow_ratio = to_num(performance.get('slowQueryRatio'), 0) # 慢查询比例（%）
-    query_score = 100.0  # 查询性能基础分：满分开始
-    if avg_ms > 100:     # 查询时间超过100ms，扣20分
-        query_score -= 20
-    elif avg_ms > 50:    # 查询时间50-100ms，扣10分
-        query_score -= 10
-
-    if slow_ratio > 5:   # 慢查询比例超过5%，扣15分
-        query_score -= 15
-    elif slow_ratio > 2: # 慢查询比例2-5%，扣10分
-        query_score -= 10
-
-    query_score = clamp_value(query_score)
+    avg_ms = to_num(performance.get('avgQueryTime'), 0)
+    slow_ratio = to_num(performance.get('slowQueryRatio'), 0)
+    L_REF = 200.0
+    S_REF = 10.0
+    lat_penalty = min(60.0, (avg_ms / L_REF) * 60.0)
+    slow_penalty = min(40.0, (slow_ratio / S_REF) * 40.0)
+    query_score = clamp_value(100.0 - lat_penalty - slow_penalty)
 
     # 缓存分（命中率越高越好，两个命中率平均；缺失则取 50）
     hit1 = performance.get('bufferPoolHitRate')

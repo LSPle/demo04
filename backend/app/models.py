@@ -1,13 +1,14 @@
 from datetime import datetime
-from . import db
+from app import db
 
-'''核心业务模块都依赖的数据库模型'''
+'''核心业务模块都依赖的数据库模型，这是SQLAlchemy的模型类,通过python映射到数据库'''
 class UserInfo(db.Model):
     __tablename__ = 'userinfo'
 
     user_id = db.Column('userId', db.String(255), primary_key=True)
     password = db.Column(db.String(255), nullable=True)
 
+    # 在auth.py中被调用
     def to_public(self):
         return {
             'id': self.user_id,
@@ -28,6 +29,7 @@ class Instance(db.Model):
     user_id = db.Column('userId', db.String(255), nullable=False, index=True)
     add_time = db.Column('addTime', db.DateTime, nullable=False, default=datetime.utcnow)
 
+    # instances.py中被调用
     def to_dict(self):
         return {
             'id': self.id,

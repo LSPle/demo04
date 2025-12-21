@@ -92,8 +92,10 @@ def compute_scores(summary: Dict[str, Any]):
     # MySQL配置评分：从100分开始，只扣分不加分
     mysql_score = 100.0
     
-    # 连接压力：连接使用率过高时扣分
-    mysql_score -= min(conn_ratio * 25.0, 20.0)
+    # 连接压力：连接使用率过高时扣分（超过80%才开始扣分）
+    if conn_ratio > 0.8:
+        # (conn_ratio - 0.8) 范围是 0~0.2，乘以 100 后范围是 0~20
+        mysql_score -= (conn_ratio - 0.8) * 100.0
 
     # 缓存命中率：命中率低时扣分
     if hit < 80:
@@ -102,10 +104,11 @@ def compute_scores(summary: Dict[str, Any]):
         mysql_score -= 8   # 命中率偏低，扣8分
 
     # 慢查询比例：慢查询过多时扣分
-    if slow_ratio > 5:
-        mysql_score -= 15  # 慢查询很多，扣15分
-    elif slow_ratio > 2:
-        mysql_score -= 8   # 慢查询偏多，扣8分
+    # 毕设演示场景放宽阈值：因为总查询基数小，容易出现高比例
+    if slow_ratio > 25:
+        mysql_score -= 15  # 慢查询严重（>25%），扣15分
+    elif slow_ratio > 10:
+        mysql_score -= 8   # 慢查询偏多（>10%），扣8分
 
     # 平均响应时间：高延迟扣分，低延迟加少量分
     if avg_ms > 100:
@@ -120,12 +123,13 @@ def compute_scores(summary: Dict[str, Any]):
     mysql_score -= min(deadlocks * 5.0, 15.0)
 
     # 索引使用率：过低扣分，较高略增分
-    if index_rate < 70:
-        mysql_score -= 8
-    elif index_rate < 85:
-        mysql_score -= 4
+    # 毕设场景：小表可能倾向全表扫描，大幅降低扣分阈值
+    if index_rate < 30:
+        mysql_score -= 8   # 极低（<30%），扣8分
+    elif index_rate < 50:
+        mysql_score -= 4   # 较低（<50%），扣4分
     else:
-        mysql_score += 2
+        mysql_score += 2   # >=50% 视为及格，加2分
 
     mysql_score = clamp_value(mysql_score)
 
@@ -138,25 +142,27 @@ def compute_scores(summary: Dict[str, Any]):
     # 性能评分：从100分开始，只扣分不加分
     performance_score = 100.0
     
-    # P95 延迟：延迟过高时扣分
-    if p95 > 50:
-        performance_score -= 25  # 延迟很高，扣25分
-    elif p95 > 30:
-        performance_score -= 15  # 延迟偏高，扣15分
-    elif p95 > 20:
-        performance_score -= 8   # 延迟略高，扣8分
+    # P95 延迟：延迟过高时扣分（加大力度，确保极差情况能扣到0分）
+    if p95 > 500:
+        performance_score -= 60  # 严重卡顿（>500ms），直接扣60分
+    elif p95 > 200:
+        performance_score -= 40  # 明显卡顿（>200ms），扣40分
+    elif p95 > 50:
+        performance_score -= 20  # 轻微卡顿（>50ms），扣20分
 
     # Redo/WAL 写入延迟：写入延迟过高时扣分
-    if redo > 10:
-        performance_score -= 15  # 写入延迟很高，扣15分
-    elif redo > 5:
-        performance_score -= 8   # 写入延迟偏高，扣8分
+    if redo > 50:
+        performance_score -= 40  # 磁盘严重瓶颈（>50ms），扣40分
+    elif redo > 20:
+        performance_score -= 20  # 磁盘瓶颈（>20ms），扣20分
+    elif redo > 10:
+        performance_score -= 10  # 磁盘略慢（>10ms），扣10分
 
     performance_score = clamp_value(performance_score)
 
     # 4) 安全/稳定评分（占比较小）：示例使用复制延迟（若无复制，默认良好）
     repl_delay = to_num(mysql.get('replication_delay_ms'), 0.0)
-    security_score = 85.0
+    security_score = 100.0
     if repl_delay > 5000:
         security_score -= 20
     elif repl_delay > 1000:

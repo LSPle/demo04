@@ -85,6 +85,7 @@ class TableAnalyzerService:
             sample_rows = self.max_sample_rows
             
         
+        conn = None
         try:
             # 使用统一连接方法，去除重复代码
             conn = self.mysql_connection(instance, database)
@@ -161,19 +162,24 @@ class TableAnalyzerService:
                         index_dict[key_name]['index_type'] = idx.get('Index_type')
                 
                 result['indexes'] = list(index_dict.values())
-            
-            conn.close()
             return True, result, ""
             
         except Exception as e:
             logger.error(f"采样表 {table_name} 失败: {e}")
             return False, {}, f"采样失败: {e}"
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
     
     #获取SQL的执行计划
     def get_explain_plan(self, instance: Instance, database: str, sql: str):   
         if not pymysql:
             return False, {}, "MySQL驱动不可用"
         
+        conn = None
         try:
             # 使用统一连接方法，去除重复代码
             conn = self.mysql_connection(instance, database)
@@ -182,8 +188,6 @@ class TableAnalyzerService:
                 cursor.execute(f"EXPLAIN {sql}")
                 traditional_explain = cursor.fetchall()
             
-            conn.close()
-            
             return True, {
                 'traditional_plan': traditional_explain
             }, ""
@@ -191,6 +195,12 @@ class TableAnalyzerService:
         except Exception as e:
             logger.error(f"获取执行计划失败: {e}")
             return False, {}, f"执行计划获取失败: {e}"
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
    
     
@@ -200,6 +210,7 @@ class TableAnalyzerService:
         if not pymysql:
             return False, {}, "MySQL驱动不可用"
         
+        conn = None
         try:
             conn = self.mysql_connection(instance, database)
             
@@ -295,13 +306,17 @@ class TableAnalyzerService:
 
                 
             
-            # 关闭数据库连接
-            conn.close()
             return True, result, ""
             
         except Exception as e:
             logger.error(f"获取表 {table_name} 元信息失败: {e}")
             return False, {}, f"元信息获取失败: {e}"
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
 
     # 格式化字节大小为可读格式

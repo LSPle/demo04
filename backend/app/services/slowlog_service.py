@@ -53,9 +53,6 @@ class SlowLogService:
         self.timeout = timeout
     #连接MySQL实例
     def mysql_connect(self, inst: Instance):     
-        if not pymysql:
-            print("错误：缺少pymysql模块，请运行 pip install pymysql")
-            return None 
         return pymysql.connect(
             host=inst.host,
             port=inst.port,
@@ -76,44 +73,38 @@ class SlowLogService:
             return False, {}, "实例不存在"
         if (inst.db_type or '').strip() != 'MySQL':
             return False, {}, "仅支持MySQL实例"
-        
+
+        conn = None
         try:
             conn = self.mysql_connect(inst)
-            try:
-                # 初始化返回数据结构
-                # 初始化返回数据结构
-                overview = {}        # 慢查询概览信息
-                ps_top = []         # 性能统计排行榜
-                file_samples = []   # 日志文件样本
-                warnings = []       # 警告信息列表
+            if not conn:
+                return False, {}, "MySQL连接失败"
 
-                with conn.cursor() as cur:
-                    # 1. 获取MySQL慢查询相关配置
-                    overview = self._get_mysql_config(cur)
-                    
-                    # 2. 从performance_schema获取Top SQL统计
-                    if overview.get('performance_schema') == 'ON':
-                        ps_top = self._get_top_sql_from_ps(cur, top, min_avg_ms)
-                    else:
-                        warnings.append('performance_schema 未开启，无法生成 Top SQL 指纹统计')
+            overview = {}
+            ps_top = []
+            file_samples = []
+            warnings = []
 
-                    # 3. 从慢查询表获取样本数据
-                    if overview.get('slow_query_log') == 'ON' and 'TABLE' in overview.get('log_output', ''):
-                        file_samples = self._get_samples_from_table(cur)
-                    else:
-                        warnings.append('慢查询日志未以TABLE方式输出，跳过表抽样')
+            with conn.cursor() as cur:
+                overview = self._get_mysql_config(cur)
 
-                # 组装返回数据
-                data = {
-                    'overview': overview,
-                    'ps_top': ps_top,
-                    'file_samples': file_samples,
-                    'warnings': warnings
-                }
-                return True, data, 'OK'
-                
-            finally:
-                conn.close()
+                if overview.get('performance_schema'):
+                    ps_top = self._get_top_sql_from_ps(cur, top, min_avg_ms)
+                else:
+                    warnings.append('performance_schema 未开启，无法生成 Top SQL 指纹统计')
+
+                if overview.get('slow_query_log') and 'TABLE' in overview.get('log_output', ''):
+                    file_samples = self._get_samples_from_table(cur)
+                else:
+                    warnings.append('慢查询日志未以TABLE方式输出，跳过表抽样')
+
+            data = {
+                'overview': overview,
+                'ps_top': ps_top,
+                'file_samples': file_samples,
+                'warnings': warnings
+            }
+            return True, data, 'OK'
                 
         except pymysql.Error as db_error:
             # 数据库连接或查询错误
@@ -125,6 +116,12 @@ class SlowLogService:
             error_msg = f"系统错误: {e}"
             logger.error(f"慢日志分析失败(实例ID={getattr(inst, 'id', None)}): {error_msg}")
             return False, {}, error_msg
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
     #获取MySQL慢查询相关配置
     def _get_mysql_config(self, cur):
        
@@ -279,55 +276,47 @@ class SlowLogService:
             return False, {}, "实例不存在"
         if (inst.db_type or '').strip() != 'MySQL':
             return False, {}, "仅支持MySQL实例"
-            
+
+        conn = None
         try:
             conn = self.mysql_connect(inst)
-            try:
-                with conn.cursor() as cur:
-                    # 检查慢查询日志配置
-                    overview = self.check_slow_log_config(cur)
-                    if not self.is_table_output_enabled(overview):
-                        return False, {'overview': overview}, "仅支持 log_output 包含 TABLE 的数据库"
+            if not conn:
+                return False, {}, "MySQL连接失败"
 
-                    # 构建查询条件
-                    # where_sql, params = self.build_query_conditions(filters or {})
-                    where_sql, params = self.query_conditions(filters)
+            with conn.cursor() as cur:
+                overview = self.check_slow_log_config(cur)
+                if not self.is_table_output_enabled(overview):
+                    return False, {'overview': overview}, "仅支持 log_output 包含 TABLE 的数据库"
 
-                    # 获取总记录数
-                    total = self.get_total_count(cur, where_sql, params)
+                where_sql, params = self.query_conditions(filters)
 
-                    # 处理分页参数
-                    # 验证并设置页码，确保页码至少为1
-                    if str(page).isdigit():
-                        page = max(1, int(page))
-                    else:
-                        page = 1
-                    
-                    # 验证并设置每页大小，限制在1-100之间
-                    if str(page_size).isdigit():
-                        page_size = int(page_size)
-                        if page_size < 1:
-                            page_size = 1
-                        elif page_size > 100:
-                            page_size = 100
-                    else:
-                        page_size = 10
-                    offset = (page - 1) * page_size
+                total = self.get_total_count(cur, where_sql, params)
 
-                    # 获取分页数据
-                    items = self.get_paged_data(cur, where_sql, params, page_size, offset)
+                if str(page).isdigit():
+                    page = max(1, int(page))
+                else:
+                    page = 1
 
-                    data = {
-                        'overview': overview,
-                        'items': items,
-                        'total': total,
-                        'page': page,
-                        'page_size': page_size,
-                    }
-                    return True, data, 'OK'
-                    
-            finally:
-                conn.close()
+                if str(page_size).isdigit():
+                    page_size = int(page_size)
+                    if page_size < 1:
+                        page_size = 1
+                    elif page_size > 100:
+                        page_size = 100
+                else:
+                    page_size = 10
+                offset = (page - 1) * page_size
+
+                items = self.get_paged_data(cur, where_sql, params, page_size, offset)
+
+                data = {
+                    'overview': overview,
+                    'items': items,
+                    'total': total,
+                    'page': page,
+                    'page_size': page_size,
+                }
+                return True, data, 'OK'
                 
         except pymysql.Error as db_error:
             # 数据库连接或查询错误
@@ -339,6 +328,12 @@ class SlowLogService:
             error_msg = f"系统错误: {e}"
             logger.error(f"查询慢日志表失败(实例ID={getattr(inst, 'id', None)}): {error_msg}")
             return False, {}, error_msg
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
     #检查慢查询日志配置
     def check_slow_log_config(self, cur):
         
