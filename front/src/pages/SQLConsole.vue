@@ -284,7 +284,6 @@ async function getDatabaseList(instanceId) {
   try {
     loadingDatabases.value = true;
     const data = await apiClient.getInstanceDatabases(instanceId);
-    // console.log('获取数据库列表成功:', data);
     const databases = data?.databases || [];
     databaseList.value = databases.map(db => ({
       name: db,

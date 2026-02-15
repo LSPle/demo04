@@ -74,31 +74,38 @@
 </template>
 
 <script setup>
+// 组合式 API
 import { ref, onMounted, onUnmounted } from 'vue';
+// 提示组件
 import { message } from 'ant-design-vue';
+// 请求封装
 import apiClient from '../utils/apiClient';
+// 全局实例缓存
 import globalInstances from '../utils/globalInstances';
 
+// 表单状态
 const selectedInstance = ref('');
 const selectedDatabase = ref('');
 const sqlQuery = ref('');
+// 分析结果和加载状态
 const optimizationResults = ref('');
 const isAnalyzing = ref(false);
 
+// 下拉选项
 const instanceOptions = ref([]);
 const databaseOptions = ref([]);
 
 
-// 使用全局状态管理获取运行中的实例
+// 获取实例列表（来自全局缓存）
 async function getInstanceList() {
   try {
-    // 确保全局数据已加载
+    // 先确保缓存加载完
     await globalInstances.ensureInstancesLoaded();
     
-    // 获取运行中的实例
+    // 只拿运行中的实例
     const runningInstances = globalInstances.getRunningInstances();
     
-    // 格式化选项
+    // 转成下拉选项格式
     instanceOptions.value = runningInstances.map(i => ({
       value: String(i.id),
       label: `${i.instanceName} (${i.dbType}) ${i.host}:${i.port}`
@@ -109,6 +116,7 @@ async function getInstanceList() {
   }
 }
 
+// 根据实例加载数据库列表
 async function getDatabaseList(instanceId) {
   try {
     const data = await apiClient.getInstanceDatabases(instanceId);
@@ -119,17 +127,20 @@ async function getDatabaseList(instanceId) {
   }
 }
 
+// 实例变化时清空数据库并重新拉取
 function handleInstanceChange(val) {
   selectedDatabase.value = '';
   if (val) getDatabaseList(val);
 }
 
+// 发起 SQL 分析
 async function executeSqlAnalysis() {
   if (!selectedInstance.value) { message.warning('请选择实例'); return; }
   if (!selectedDatabase.value) { message.warning('请选择数据库'); return; }
   if (!sqlQuery.value.trim()) { message.warning('请输入SQL语句'); return; }
   try {
     isAnalyzing.value = true;
+    // 组装请求参数
     const payload = {
       instanceId: Number(selectedInstance.value),
       database: String(selectedDatabase.value),
@@ -144,6 +155,7 @@ async function executeSqlAnalysis() {
   }
 }
 
+// 重置表单
 function resetForm() {
   selectedInstance.value = '';
   selectedDatabase.value = '';
@@ -151,17 +163,19 @@ function resetForm() {
   optimizationResults.value = '';
 }
 
-// 监听全局缓存清理事件
+// 监听全局缓存清理事件，清空并重新拉取
 function handleInstancesCacheCleared() {
   instanceOptions.value = [];
   getInstanceList();
 }
 window.addEventListener('instances-cache-cleared', handleInstancesCacheCleared);
 
+// 页面销毁时移除监听
 onUnmounted(() => {
   window.removeEventListener('instances-cache-cleared', handleInstancesCacheCleared);
 });
 
+// 页面挂载时加载实例
 onMounted(() => {
   getInstanceList();
 });

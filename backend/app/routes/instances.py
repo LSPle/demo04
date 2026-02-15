@@ -216,30 +216,10 @@ def get_instance(instance_id):
         data = instance.to_dict()
 
         # 尝试获取数据库版本号（MySQL）
-        try:
-            conn = pymysql.connect(
-                host=instance.host,
-                port=int(instance.port or 3306),
-                user=instance.username or '',
-                password=instance.password or '',
-                database='mysql',
-                charset='utf8mb4',
-                connect_timeout=2,
-                read_timeout=2,
-                write_timeout=2,
-                cursorclass=pymysql.cursors.Cursor
-            )
-            try:
-                with conn.cursor() as cur:
-                    cur.execute('SELECT VERSION()')
-                    row = cur.fetchone()
-                    if row:
-                        data['version'] = str(row[0])
-            finally:           
-                    conn.close()
-               
-        except Exception:
-            # 无法连接或无权限时不抛错，版本号置为未知
+        ok, rows, err = db_connection_manager.execute_query(instance, "SELECT VERSION()")
+        if ok and rows:
+            data['version'] = str(rows[0][0])
+        else:
             data['version'] = data.get('version') or None
 
         return jsonify(data), 200
@@ -250,7 +230,6 @@ def get_instance(instance_id):
 # 获取实例的数据库列表
 @instances_bp.get('/instances/<int:instance_id>/databases')
 def list_instance_databases(instance_id):
-    
     try:
         user_id = request.args.get('userId')
         
@@ -263,15 +242,13 @@ def list_instance_databases(instance_id):
         ok, rows, err = db_connection_manager.execute_query(instance, "SHOW DATABASES")
         # 为保持之前的容错行为：若失败，返回空列表但状态仍为200
         if not ok:
-            return jsonify({'databases': []}), 200
+            return jsonify({'error': err}), 500
 
-        # 提取数据库名称，兼容多种返回结构
+        # 提取数据库名称（MySQL默认返回序列结构）
         databases = []
         for row in rows:
-            if isinstance(row, (list, tuple)) and row:
+            if row:
                 databases.append(row[0])
-            elif isinstance(row, dict) and row:
-                databases.append(list(row.values())[0])
 
         databases.sort()
         return jsonify({'databases': databases}), 200
@@ -282,7 +259,6 @@ def list_instance_databases(instance_id):
 # 获取数据库的表列表
 @instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables')
 def list_tables(instance_id, database):
-    
     try:
         user_id = request.args.get('userId')
         
@@ -291,67 +267,20 @@ def list_tables(instance_id, database):
         if not instance:
             return jsonify({'error': '实例不存在'}), 404
         
-        # 检查数据库类型
-        if instance.db_type != 'MySQL':
-            return jsonify({'error': '仅支持MySQL实例'}), 400
-        
-        if not pymysql:
-            return jsonify({'error': 'MySQL驱动不可用'}), 500
+        # 使用统一的连接管理器执行查询，获取表列表
+        ok, rows, err = db_connection_manager.execute_query(instance, "SHOW TABLES", database=database)
+        if not ok:
+            return jsonify({'error': err}), 500
 
-        # 连接数据库获取表列表
-        conn = pymysql.connect(
-            host=instance.host,
-            port=instance.port,
-            user=instance.username or '',
-            password=instance.password or '',
-            database=database,
-            charset='utf8mb4',
-            cursorclass=pymysql.cursors.DictCursor
-        )
-        
-        try:
-            with conn.cursor() as cursor:
-                cursor.execute("SHOW TABLES")
-                rows = cursor.fetchall()
-                
-                # 提取表名
-                tables = []
-                for row in rows:
-                    if isinstance(row, dict) and row:
-                        tables.append(list(row.values())[0])
-                    elif isinstance(row, (list, tuple)) and row:
-                        tables.append(row[0])
-                
-                tables.sort()
-            
-            return jsonify({'tables': tables}), 200
-            
-        finally:
-            conn.close()
+        # 提取表名（MySQL默认返回序列结构）
+        tables = []
+        for row in rows:
+            if row:
+                tables.append(row[0])
+
+        tables.sort()
+        return jsonify({'tables': tables}), 200
             
     except Exception as e:
         return jsonify({'error': f'获取数据表失败: {str(e)}'}), 500
 
-#获取数据库的表结构
-@instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables/<string:table_name>/schema')
-def get_table_schema(instance_id, database, table_name):
-    
-    try:
-        # 查找实例
-        instance = Instance.query.get(instance_id)
-        if not instance:
-            return jsonify({'error': '实例不存在'}), 404
-        
-        # 检查数据库类型
-        if instance.db_type != 'MySQL':
-            return jsonify({'error': '仅支持MySQL实例'}), 400
-
-        # 获取表结构
-        ok, schema, msg = table_analyzer_service._get_table_metadata_only(instance, database, table_name)
-        if not ok:
-            return jsonify({'error': msg}), 400
-        
-        return jsonify({'schema': schema}), 200
-        
-    except Exception as e:
-        return jsonify({'error': f'获取表结构失败: {str(e)}'}), 500

@@ -63,43 +63,38 @@ class DatabaseConnectionManager:
                 pass
     
     # 创建数据库连接
-    def create_connection(self, instance, database=None):
-       
-        # 从实例对象中获取连接参数
-        # 使用 or 操作符提供默认值，避免None值导致的错误
-        host = instance.host or ''              # 主机地址，默认空字符串
-        port = instance.port or 3306            # 端口号，默认3306（MySQL标准端口）
-        username = instance.username or ''      # 用户名，默认空字符串
-        password = instance.password or ''      # 密码，默认空字符串
-        
-        # 确保端口是整数类型
-        # 有时候端口可能以字符串形式存储，需要转换
-        if not isinstance(port, int):
-            # 如果端口有值，就转成整数
-            if port:
-                port = int(port)
-            else:
-                # 如果没值，就用默认端口3306
-                port = 3306
-        
-        # 创建并返回数据库连接
-        conn = pymysql.connect(
-            host=host,                      # 数据库服务器地址
-            port=port,                      # 数据库服务器端口
-            user=username,                  # 数据库用户名
-            password=password,              # 数据库密码
-            database=database,              # 要连接的数据库名称
-            charset='utf8mb4',              # 字符集设置
-            connect_timeout=self.timeout    # 连接超时时间
-        )
-        return conn
+    def create_connection(self, instance, database=None, cursorclass=None, read_timeout=None, write_timeout=None):
+        host = instance.host or ''
+        port = instance.port
+        username = instance.username or ''
+        password = instance.password or ''
+
+        try:
+            port = int(port) if port else 3306
+        except Exception:
+            port = 3306
+
+        conn_kwargs = {
+            'host': host,
+            'port': port,
+            'user': username,
+            'password': password,
+            'database': database,
+            'charset': 'utf8mb4',
+            'connect_timeout': self.timeout,
+            'read_timeout': read_timeout or self.timeout,
+            'write_timeout': write_timeout or self.timeout
+        }
+        if cursorclass is not None:
+            conn_kwargs['cursorclass'] = cursorclass
+        return pymysql.connect(**conn_kwargs)
     
     # 执行mysql查询
-    def execute_query(self, instance, query, database=None):
+    def execute_query(self, instance, query, database=None, cursorclass=None):
         conn = None
         cursor = None
         try:
-            conn = self.create_connection(instance, database)
+            conn = self.create_connection(instance, database, cursorclass=cursorclass)
             cursor = conn.cursor()
             cursor.execute(query)
             result = cursor.fetchall()

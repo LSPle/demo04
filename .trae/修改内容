@@ -1,1 +1,4 @@
 给实例检测添加一个时限，超时后还会在前端显示 无实例
+
+sql_analyze.py修改名字为sql_windows.py
+backend\app\services\sql_advice_service.py中的_safe_str进行改名
