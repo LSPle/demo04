@@ -169,8 +169,7 @@ class tableAnalyzerService:
             with conn.cursor() as cursor:
                 cursor.execute(f"EXPLAIN {sql}")
                 traditional_plan = cursor.fetchall()
-            
-            return traditional_plan
+            return True, {'traditional_plan': traditional_plan}, ""
 
             
         except Exception as e:

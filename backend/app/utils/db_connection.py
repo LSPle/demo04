@@ -63,7 +63,7 @@ class DatabaseConnectionManager:
                 pass
     
     # 创建数据库连接
-    def create_connection(self, instance, database=None, cursorclass=None, read_timeout=None, write_timeout=None):
+    def create_connection(self, instance, database=None, cursorclass=None, read_timeout=None, write_timeout=None, connect_timeout=None):
         host = instance.host or ''
         port = instance.port
         username = instance.username or ''
@@ -81,7 +81,7 @@ class DatabaseConnectionManager:
             'password': password,
             'database': database,
             'charset': 'utf8mb4',
-            'connect_timeout': self.timeout,
+            'connect_timeout': connect_timeout or self.timeout,
             'read_timeout': read_timeout or self.timeout,
             'write_timeout': write_timeout or self.timeout
         }
