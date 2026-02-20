@@ -2,3 +2,4 @@
 
 sql_analyze.py修改名字为sql_windows.py
 backend\app\services\sql_advice_service.py中的_safe_str进行改名
+内存\cpu的使用率采用一段时间的平均值

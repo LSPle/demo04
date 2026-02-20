@@ -234,9 +234,8 @@ class ApiClient {
   
   //--------------------------------------------------------------------------------------------------------------
   
-  // 智能 SQL 分析
+
   // 发送 SQL 语句给后端 AI 模型进行分析优化
-  // timeout: 300000ms (5分钟)，因为 AI 分析可能比较耗时
   async analyzeSql(data) {
     return this.post(this.appendUserId(API_ENDPOINTS.SQL_ANALYZE), data, true, { timeout: 300000 });
   }
@@ -267,14 +266,14 @@ class ApiClient {
   }
 
   /**
-   * 慢日志分析
+   * 慢日志分析(mei)
    */
   async analyzeSlowlog(instanceId) {
     return this.post(this.appendUserId(API_ENDPOINTS.SLOWLOG_ANALYZE(instanceId)), {}, true, { timeout: 300000 });
   }
 
   /**
-   * 获取慢日志列表
+   * 获取慢日志列表(mei)
    */
   async getSlowlogs(instanceId, params = {}) {
     const queryString = new URLSearchParams(params).toString();
@@ -294,13 +293,13 @@ class ApiClient {
   /**
    * 获取状态汇总
    */
-  async getStatusSummary() {
-    // 监控接口无需 userId（全局）
-    return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
-  }
+  // async getStatusSummary() {
+  //   // 监控接口无需 userId（全局）
+  //   return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
+  // }
 
   /**
-   * 获取配置优化摘要（新路径 /config）
+   * 获取配置优化摘要（新路径 /config）(mei)
    * 强制窗口采样，默认6秒
    */
   async getConfigSummary(instanceId, windowSeconds = 6) {
@@ -313,14 +312,14 @@ class ApiClient {
   }
 
   /**
-   * 获取配置优化建议（DeepSeek，新路径 /config）
+   * 获取配置优化建议（DeepSeek，新路径 /config）(mei)
    */
   async getConfigAdvice(instanceId) {
     return this.post(API_ENDPOINTS.CONFIG_ADVISE(instanceId), {}, true, { timeout: 300000 });
   }
 
   /**
-   * 配置建议（直接拼接前端已有数据，纯文本返回）
+   * 配置建议（直接拼接前端已有数据，纯文本返回）(mei)
    */
   async getConfigAdviceText(instanceId, performance) {
     const body = typeof performance === 'object' ? { performance } : {};

@@ -3,6 +3,7 @@ import datetime
 from typing import Any, Dict, List, Tuple, Optional
 import pymysql
 from ..models import Instance
+from ..utils.db_connection import db_connection_manager
 
 # try:
 #     import pymysql
@@ -47,18 +48,14 @@ def to_string(val):
     return str(val)
 
 #MySQL慢查询日志分析服务
-class SlowLogService: 
+class slowLogService: 
     #初始化慢查询服务
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
     #连接MySQL实例
-    def mysql_connect(self, inst: Instance):     
-        return pymysql.connect(
-            host=inst.host,
-            port=inst.port,
-            user=inst.username or '',
-            password=inst.password or '',
-            charset='utf8mb4',
+    def mysql_connect(self, inst: Instance):
+        return db_connection_manager.create_connection(
+            instance=inst,
             cursorclass=pymysql.cursors.DictCursor,
             connect_timeout=self.timeout,
             read_timeout=self.timeout,
@@ -80,9 +77,11 @@ class SlowLogService:
             if not conn:
                 return False, {}, "MySQL连接失败"
 
+            # 慢查询整体配置与状态信息
             overview = {}
+            # performance_schema 的 Top SQL 统计结果
             ps_top = []
-            file_samples = []
+            # 过程中的提示信息（如未开启相关功能）
             warnings = []
 
             with conn.cursor() as cur:
@@ -93,15 +92,9 @@ class SlowLogService:
                 else:
                     warnings.append('performance_schema 未开启，无法生成 Top SQL 指纹统计')
 
-                if overview.get('slow_query_log') and 'TABLE' in overview.get('log_output', ''):
-                    file_samples = self._get_samples_from_table(cur)
-                else:
-                    warnings.append('慢查询日志未以TABLE方式输出，跳过表抽样')
-
             data = {
                 'overview': overview,
                 'ps_top': ps_top,
-                'file_samples': file_samples,
                 'warnings': warnings
             }
             return True, data, 'OK'
@@ -234,36 +227,6 @@ class SlowLogService:
         else:
             avg_ms = 0.0
         return avg_ms, total_ms
-    #从mysql.slow_log表获取样本数据
-    def _get_samples_from_table(self, cur):
- 
-        try:
-            cur.execute(
-                "SELECT start_time, db, query_time, lock_time, rows_sent, rows_examined, sql_text "
-                "FROM mysql.slow_log ORDER BY start_time DESC LIMIT %s",
-                (10,)  # 获取最近10条记录
-            )
-            rows = cur.fetchall()
-
-            samples = []
-            for r in rows:
-                # 构建慢查询记录字典
-                samples.append({
-                    'time': to_string(r.get('start_time')),                      # 查询开始时间
-                    'db': to_string(r.get('db')),                                # 数据库名
-                    'query_time_ms': round(second(r.get('query_time')) * 1000, 2), # 查询执行时间（毫秒）
-                    'lock_time_ms': round(second(r.get('lock_time')) * 1000, 2),   # 锁等待时间（毫秒）
-                    'rows_sent': int(r.get('rows_sent') or 0),                   # 返回行数
-                    'rows_examined': int(r.get('rows_examined') or 0),           # 扫描行数
-                    'sql': to_string(r.get('sql_text'))                          # SQL语句内容
-                })
-            return samples
-            
-        except Exception as e:
-            # 读取慢日志表抽样数据失败，返回空列表
-            logger.info(f"读取慢日志表抽样失败: {e}")
-            return []
-
     # 从mysql.slow_log表分页查询慢查询记录
     def list_from_table(
         self,
@@ -285,7 +248,10 @@ class SlowLogService:
 
             with conn.cursor() as cur:
                 overview = self.check_slow_log_config(cur)
+                log_output = str(overview.get('log_output') or '').upper()
                 if not self.is_table_output_enabled(overview):
+                    if 'FILE' in log_output:
+                        return False, {'overview': overview}, "慢查询日志为FILE输出，仅支持TABLE方式"
                     return False, {'overview': overview}, "仅支持 log_output 包含 TABLE 的数据库"
 
                 where_sql, params = self.query_conditions(filters)
@@ -439,4 +405,4 @@ class SlowLogService:
         return items
 
 
-slowlog_service = SlowLogService()
+slowlog_service = slowLogService()

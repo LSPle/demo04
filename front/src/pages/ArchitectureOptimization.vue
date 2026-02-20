@@ -89,6 +89,7 @@
                   </div>
                 </div>
               </a-col>
+              
               <a-col :span="16">
                 <div class="score-details">
                   <a-row :gutter="16">
@@ -319,14 +320,23 @@ import globalInstances from '../utils/globalInstances';
 let cacheClearedHandler = null;
 
 // 响应式数据
+// 实例列表加载中
 const instanceLoading = ref(false);
+// 性能数据加载中
 const dataLoading = ref(false);
+// 分析建议生成中
 const analysisLoading = ref(false);
+// 实例下拉选项
 const instanceOptions = ref([]);
+// 当前选中的实例ID
 const selectedInstance = ref('');
+// 是否已加载数据
 const dataLoaded = ref(false);
+// 实例基础信息
 const instanceData = ref({});
+// 性能指标数据
 const performanceData = ref({});
+// 性能评分
 const performanceScore = ref({
   overall: 0,
   cpu: 0,
@@ -334,6 +344,7 @@ const performanceScore = ref({
   connection: 0,
   query: 0
 });
+// 分析结果文本
 const analysisResultText = ref('');
 
 // 状态映射（从全局状态获取）
@@ -487,18 +498,21 @@ function getStatusColor(status) {
   return colorMap[status] || 'default';
 }
 
+// 不同颜色显示
 function getStatusColorByOk(ok) {
   if (ok === true) return 'green';
   if (ok === false) return 'red';
   return 'default';
 }
 
+// 实例状态
 function getStatusTextByOk(ok) {
   if (ok === true) return '运行中';
   if (ok === false) return '异常';
   return '未知';
 }
 
+// 删除
 function getStatusText(status) {
   const textMap = {
     'running': '运行中',
@@ -508,7 +522,7 @@ function getStatusText(status) {
   };
   return textMap[status] || status;
 }
-
+// 格式化时间
 function formatDateTime(dateTime) {
   if (!dateTime) return '-';
   try {
@@ -521,16 +535,19 @@ function formatDateTime(dateTime) {
   }
 }
 
+// 判断是否是有效数字
 function isNumber(x) {
   return typeof x === 'number' && !isNaN(x);
 }
 
+// 决定分数颜色
 function getScoreStatus(score) {
   if (score >= 90) return 'success';
   if (score >= 70) return 'normal';
   return 'exception';
 }
 
+// 给分数数字加不同的 CSS 类名
 function getScoreClass(score) {
   if (score >= 90) return 'score-excellent';
   if (score >= 80) return 'score-good';
@@ -539,6 +556,7 @@ function getScoreClass(score) {
   return 'score-bad';
 }
 
+// 分数描述
 function getScoreDescription(score) {
   if (score >= 90) return '性能一般';
   if (score >= 80) return '良好';
@@ -547,7 +565,7 @@ function getScoreDescription(score) {
   return '需要优化';
 }
 
-// 本地评分逻辑已移除，统一使用后端返回的评分
+
 
 onMounted(() => {
   loadInstances();

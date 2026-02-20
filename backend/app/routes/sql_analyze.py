@@ -75,7 +75,6 @@ def execute_sql():
     """执行 SQL（仅 MySQL）。支持查询类与非查询类，返回结果或受影响行数。"""
     try:
         data = request.get_json() or {}
-        logger.info(f"sql_analyze：看看获取到的data: {data}")
         instance_id = int(data.get('instanceId') or 0)
         sql = (data.get('sql') or '').strip()
         database = (data.get('database') or '').strip()

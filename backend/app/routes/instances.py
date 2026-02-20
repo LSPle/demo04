@@ -203,7 +203,7 @@ def delete_instance(instance_id):
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
 
-# 获取单个实例信息(获取版本号)
+# 获取单个实例信息(同时添加获取版本号信息)
 @instances_bp.get('/instances/<int:instance_id>')
 def get_instance(instance_id):
     try:

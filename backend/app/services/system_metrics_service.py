@@ -132,6 +132,7 @@ class SystemMetricsService:
     def get_io_latency_ms(self):
         if self.should_update_cache():
             self.update_cache()
+        dio = None
         dio = self._cache.get('disk_io') or {}
         return dio.get('io_latency_ms')
     # 获取网络I/O统计
@@ -155,19 +156,19 @@ class SystemMetricsService:
             'timestamp': self._cache.get('timestamp')                                  # 数据采集时间戳，用于判断数据新鲜度
         }
     # 获取系统基本信息
-    def get_system_info(self):
-        try:
-            return {
-                'platform': psutil.WINDOWS if psutil.WINDOWS else 'unix',                # 操作系统平台类型
-                'cpu_count': psutil.cpu_count(),                                         # 物理CPU核心数
-                'cpu_count_logical': psutil.cpu_count(logical=True),                     # 逻辑CPU核心数
-                'memory_total_gb': round(psutil.virtual_memory().total / (1024**3), 1),  # 系统总内存大小（GB，保留1位小数）
-                'boot_time': psutil.boot_time(),                                         # 系统启动时间戳
-                'python_version': psutil.version_info                                    # psutil库版本信息
-            }
-        except Exception as e:
-            logger.error(f"获取系统信息失败: {e}")
-            return {}
+    # def get_system_info(self):
+    #     try:
+    #         return {
+    #             'platform': psutil.WINDOWS if psutil.WINDOWS else 'unix',                # 操作系统平台类型
+    #             'cpu_count': psutil.cpu_count(),                                         # 物理CPU核心数
+    #             'cpu_count_logical': psutil.cpu_count(logical=True),                     # 逻辑CPU核心数
+    #             'memory_total_gb': round(psutil.virtual_memory().total / (1024**3), 1),  # 系统总内存大小（GB，保留1位小数）
+    #             'boot_time': psutil.boot_time(),                                         # 系统启动时间戳
+    #             'python_version': psutil.version_info                                    # psutil库版本信息
+    #         }
+    #     except Exception as e:
+    #         logger.error(f"获取系统信息失败: {e}")
+    #         return {}
     
     def health_check(self):
         """健康检查"""
