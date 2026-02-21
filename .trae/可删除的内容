@@ -15,3 +15,5 @@ db_connection.py：
  中的validate_connection()函数，直接引入并用instance_monitor_service.py中的check_instance_connection_info函数替代
 
 论文中要安装vue-router
+
+metrics_summary_service.py中的get_summary()函数中，定义了一些未使用的变量，打算删除

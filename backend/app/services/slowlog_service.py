@@ -1,6 +1,5 @@
 import logging
 import datetime
-from typing import Any, Dict, List, Tuple, Optional
 import pymysql
 from ..models import Instance
 from ..utils.db_connection import db_connection_manager
@@ -282,6 +281,7 @@ class slowLogService:
                     'page': page,
                     'page_size': page_size,
                 }
+                # logger.info(f"慢日志分析成功,看看data全部:{data}")
                 return True, data, 'OK'
                 
         except pymysql.Error as db_error:

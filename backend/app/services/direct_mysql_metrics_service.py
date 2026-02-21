@@ -1,9 +1,11 @@
 
+from math import log
 import pymysql
 import time
 import logging
 from typing import Dict, Any, Optional, Tuple
 from ..models import Instance
+from ..utils.db_connection import db_connection_manager
 
 logger = logging.getLogger(__name__)
 # 元组访问比字典访问 更快
@@ -15,23 +17,24 @@ class DirectMySQLMetricsService:
         pass
     #建立MySQL连接"
     def _connect_to_mysql(self, inst: Instance):
-       
-        try:                     
-            conn = pymysql.connect(
-                host=inst.host,
-                port=inst.port,
-                user=inst.username,
-                password=inst.password,
-                charset='utf8mb4',
+        if not inst:
+            logger.error("MySQL连接失败: 实例为空")
+            return None
+        try:
+            return db_connection_manager.create_connection(
+                instance=inst,
                 connect_timeout=10,
-                read_timeout=30
+                read_timeout=30,
+                write_timeout=30
             )
-            return conn
         except Exception as e:
             logger.error(f"MySQL连接失败: {e}")
             return None
     #执行SQL查询并返回结果
     def execute_query(self, conn: pymysql.Connection, query: str):       
+        if not conn:
+            logger.error("查询执行失败: 连接为空")
+            return None
         try:
             with conn.cursor() as cursor:
                 cursor.execute(query)
@@ -56,6 +59,7 @@ class DirectMySQLMetricsService:
             # 第一次采样
             t0 = time.time()
             r1 = self.execute_query(conn, status_query)
+            logger.info(f"第一次采样状态查询结果: {r1}")
             if not r1 or not r1.get('rows'):
                 return {'qps': None, 'tps': None, 'error': '状态查询失败'}
             s1: Dict[str, int] = {}
@@ -86,12 +90,19 @@ class DirectMySQLMetricsService:
                 except Exception:
                     s2[name] = 0
             # 计算差值与速率
+            # 计算时间间隔，避免出现除以 0
             dt = max(1e-3, t1 - t0)
+            # 计算两次采样的查询总数差值
             queries_diff = max(0, s2.get('Queries', 0) - s1.get('Queries', 0))
+            # 第二次采样的提交+回滚总数
             trx2 = s2.get('Com_commit', 0) + s2.get('Com_rollback', 0)
+            # 第一次采样的提交+回滚总数
             trx1 = s1.get('Com_commit', 0) + s1.get('Com_rollback', 0)
+            # 计算两次采样的事务总数差值
             tps_diff = max(0, trx2 - trx1)
+            # 计算每秒查询数（QPS）
             qps = round(queries_diff / dt, 2)
+            # 计算每秒事务数（TPS）
             tps = round(tps_diff / dt, 2)
             return {
                 'qps': qps,
@@ -216,7 +227,7 @@ class DirectMySQLMetricsService:
 
             # if not result:
             #     return {'slow_query_ratio': None, 'slow_queries_total': None, 'error': '慢查询统计获取失败'}
-            
+            logger.info(f"没有被筛选过的慢查询查询返回{result}")
             status_vars = {}
             for row in result['rows']:
                 var_name = row[0]
@@ -225,6 +236,8 @@ class DirectMySQLMetricsService:
                     status_vars[var_name] = int(var_value)
                 else:
                     status_vars[var_name] = 0
+            logger.info(f"被筛选过的慢查询查询返回{status_vars}")
+            
                 
             
             slow_queries = status_vars.get('Slow_queries', 0)
@@ -393,56 +406,20 @@ class DirectMySQLMetricsService:
             
             # 获取Redo写入延迟
             redo_write_latency_ms = None
-            # A: 优先尝试 MySQL 8.0 的 SHOW GLOBAL STATUS 口径
             try:
-                status_redo_query = """
-                SHOW GLOBAL STATUS WHERE Variable_name IN (
-                    'Innodb_redo_log_write_time','Innodb_redo_log_writes'
-                )
+                redo_query = """
+                SELECT name, `count` FROM information_schema.innodb_metrics
+                WHERE status='enabled' AND name IN ('log_write_time','log_writes')
                 """
-                sres = self.execute_query(conn, status_redo_query)
-                if sres and sres['rows']:
-                    kv = {row[0]: float(row[1] or 0) for row in sres['rows']}
-                    writes = kv.get('Innodb_redo_log_writes', 0.0)
-                    write_time_us = kv.get('Innodb_redo_log_write_time', 0.0)
+                redo_result = self.execute_query(conn, redo_query)
+                if redo_result and redo_result['rows']:
+                    kv = {r[0]: float(r[1] or 0) for r in redo_result['rows']}
+                    writes = kv.get('log_writes', 0.0)
+                    write_time_us = kv.get('log_write_time', 0.0)
                     if writes and writes > 0 and write_time_us and write_time_us > 0:
                         redo_write_latency_ms = round((write_time_us / writes) / 1000.0, 3)
             except Exception:
                 pass
-
-            # B: 次选使用 information_schema.innodb_metrics 的写入时间
-            if redo_write_latency_ms is None:
-                try:
-                    redo_query = """
-                    SELECT name, `count` FROM information_schema.innodb_metrics
-                    WHERE status='enabled' AND name IN ('log_write_time','log_writes')
-                    """
-                    redo_result = self.execute_query(conn, redo_query)
-                    if redo_result and redo_result['rows']:
-                        kv = {r[0]: float(r[1] or 0) for r in redo_result['rows']}
-                        writes = kv.get('log_writes', 0.0)
-                        write_time_us = kv.get('log_write_time', 0.0)
-                        if writes and writes > 0 and write_time_us and write_time_us > 0:
-                            redo_write_latency_ms = round((write_time_us / writes) / 1000.0, 3)
-                except Exception:
-                    pass
-
-            # C: 再次回退为 flush 时间近似值（若存在）
-            if redo_write_latency_ms is None:
-                try:
-                    flush_query = """
-                    SELECT name, `count` FROM information_schema.innodb_metrics
-                    WHERE status='enabled' AND name IN ('log_flush_total_time','log_writes')
-                    """
-                    fres = self.execute_query(conn, flush_query)
-                    if fres and fres['rows']:
-                        kv = {r[0]: float(r[1] or 0) for r in fres['rows']}
-                        writes = kv.get('log_writes', 0.0)
-                        flush_time_us = kv.get('log_flush_total_time', 0.0)
-                        if writes and writes > 0 and flush_time_us and flush_time_us > 0:
-                            redo_write_latency_ms = round((flush_time_us / writes) / 1000.0, 3)
-                except Exception:
-                    pass
             
             return {
                 'threads_connected': status_vars.get('Threads_connected'),
@@ -545,39 +522,26 @@ class DirectMySQLMetricsService:
         
         try:
             delay_ms = None
-            # 尝试不同的复制状态查询（兼容不同MySQL版本）
-            replication_queries = ['SHOW SLAVE STATUS', 'SHOW REPLICA STATUS']
-            
-            for query in replication_queries:
-                try:
-                    result = self.execute_query(conn, query)
-                    if result and result.get('rows') and len(result['rows']) > 0:
-                        # 获取列名索引
-                        columns = result.get('columns', [])
-                        row = result['rows'][0]
-                        
-                        # 构建字典便于查找
-                        row_dict = {}
-                        for i, col in enumerate(columns):
-                            if i < len(row):
-                                row_dict[col] = row[i]
-                        
-                        # 查找延迟字段
-                        sec = row_dict.get('Seconds_Behind_Master')
-                        if sec is None:
-                            sec = row_dict.get('Seconds_Behind_Source')
-                        
-                        if sec is not None:
-                            try:
-                                delay_ms = int(float(sec)) * 1000
-                                break
-                            except (ValueError, TypeError):
-                                logger.error(f"复制延迟值解析失败: {sec}")
-                                continue
-                except Exception as e:
-                    # 尝试下一个查询
-                    logger.debug(f"复制状态查询失败: {query}, 错误: {e}")
-                    continue
+            query = 'SHOW REPLICA STATUS'
+            result = self.execute_query(conn, query)
+            if result and result.get('rows') and len(result['rows']) > 0:
+                columns = result.get('columns', [])
+                row = result['rows'][0]
+                
+                row_dict = {}
+                for i, col in enumerate(columns):
+                    if i < len(row):
+                        row_dict[col] = row[i]
+                
+                sec = row_dict.get('Seconds_Behind_Master')
+                if sec is None:
+                    sec = row_dict.get('Seconds_Behind_Source')
+                
+                if sec is not None:
+                    try:
+                        delay_ms = int(float(sec)) * 1000
+                    except (ValueError, TypeError):
+                        logger.error(f"复制延迟值解析失败: {sec}")
             
             return {'replication_delay_ms': delay_ms}
             

@@ -36,7 +36,7 @@ class MetricsSummaryService:
                 'threads_running': None,         # 活跃线程数
                 'innodb_row_lock_waits': None,   # 行锁等待次数
                 'innodb_row_lock_time_ms': None, # 行锁等待时间 (ms)
-                'connection_pressure_pct': None, # 连接压力百分比
+                'connection_pressure_pct': None, # 连接压力百分比        -没使用？
                 'cache_hit_rate': None,          # 缓存命中率 (0~100)
                 'deadlocks': None,               # 死锁次数（累计值）
                 'slow_query_ratio': None,        # 慢查询比例 (%)
@@ -48,8 +48,8 @@ class MetricsSummaryService:
                 'transactions_total': None,      # 事务总数（累计）
             },
             'slowlog': {                         # 慢查询日志统计
-                'total_recent': None,            # 最近慢查询总数
-                'note': '',                      # 备注信息
+                'total_recent': None,            # 最近慢查询总数     -没使用？
+                'note': '',                      # 备注信息          -没使用？
             },
             # 新增：性能指标（若 exporter 已接入则给出数值，否则保持为 None）
             'perf': {                            # 性能关键指标
@@ -60,7 +60,7 @@ class MetricsSummaryService:
                 'redo_write_latency_ms': None,   # Redo日志写延迟 (ms)
                 'slowest_query_ms': None,        # 最慢查询耗时 (ms)
             },
-            'generated_at': int(time.time())
+            'generated_at': int(time.time())     # 生成时间戳（秒级）    -没使用？
         }
 
         # 系统指标采集（仅使用 psutil）
@@ -71,7 +71,7 @@ class MetricsSummaryService:
                 summary['system']['cpu_usage'] = sys_metrics.get('cpu_usage')
                 summary['system']['memory_usage'] = sys_metrics.get('memory_usage')
                 summary['system']['disk_usage'] = sys_metrics.get('disk_usage')
-                # 使用 psutil 估算的磁盘 I/O 延迟
+                # 使用 psutil 估算的磁盘 I/O 延迟，配置优化/架构优化”都需要一个磁盘性能指标
                 summary['perf']['io_latency_ms'] = sys_metrics.get('io_latency_ms')
                 logger.info("使用 psutil 采集系统指标")
             else:
