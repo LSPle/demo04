@@ -292,10 +292,10 @@ class ApiClient {
   /**
    * 获取状态汇总
    */
-  async getStatusSummary() {
-    // 监控接口无需 userId（全局）
-    return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
-  }
+  // async getStatusSummary() {
+  //   // 监控接口无需 userId（全局）
+  //   return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
+  // }
 
   /**
    * 获取配置优化摘要（新路径 /config）

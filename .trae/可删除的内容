@@ -16,4 +16,4 @@ db_connection.py：
 
 论文中要安装vue-router
 
-metrics_summary_service.py中的get_summary()函数中，定义了一些未使用的变量，打算删除
+可以删除wsgi

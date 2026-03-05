@@ -283,8 +283,8 @@ async function getDatabaseList(instanceId) {
   if (!instanceId) return;
   try {
     loadingDatabases.value = true;
-    const data = await apiClient.getInstanceDatabases(instanceId);
-    const databases = data?.databases || [];
+    const data = await apiClient.getInstanceDatabases(Number(instanceId));
+    const databases = Array.isArray(data) ? data : (Array.isArray(data?.databases) ? data.databases : []);
     databaseList.value = databases.map(db => ({
       name: db,
       tables: [],

@@ -1,0 +1,11 @@
+为什么要添加await globalInstances.loadInstances(false);  位于ArchitectureOptimization.py的runningInstances函数
+
+
+  async getConfigSummary(instanceId, windowSeconds = 6) {
+    const base = API_ENDPOINTS.CONFIG_SUMMARY(instanceId);
+    const n = parseInt(windowSeconds, 10);
+    const win = Number.isNaN(n) || n <= 0 ? 6 : Math.max(1, n);
+    const qs = new URLSearchParams({ window_s: String(win) }).toString();
+    const url = `${base}?${qs}`;
+    return this.get(url);
+  }

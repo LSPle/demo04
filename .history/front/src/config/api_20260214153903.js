@@ -24,7 +24,7 @@ export const API_ENDPOINTS = {
   SLOWLOG_LIST: (id) => `${API_BASE_URL}/api/instances/${id}/slowlog`,
   // 新增：实例状态检测接口
   MONITOR_CHECK: `${API_BASE_URL}/api/monitor/instances/check`,
-  // MONITOR_SUMMARY: `${API_BASE_URL}/api/monitor/instances/summary`,
+  MONITOR_SUMMARY: `${API_BASE_URL}/api/monitor/instances/summary`,
 
   // 新路径：配置优化摘要与建议（替代 /metrics/*）
   CONFIG_SUMMARY: (id) => `${API_BASE_URL}/api/instances/${id}/config/summary`,

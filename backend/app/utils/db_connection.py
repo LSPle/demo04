@@ -63,18 +63,35 @@ class DatabaseConnectionManager:
                 pass
     
     # 创建数据库连接
-    def create_connection(self, instance, database=None, cursorclass=None, read_timeout=None, write_timeout=None, connect_timeout=None):
-        host = instance.host or ''
-        port = instance.port
-        username = instance.username or ''
-        password = instance.password or ''
-
-        try:
-            port = int(port) if port else 3306
-        except Exception:
-            port = 3306
-
-        conn_kwargs = {
+    def create_connection(
+        self,
+        instance,
+        database=None,
+        cursorclass=None,
+        connect_timeout=None,
+        read_timeout=None,
+        write_timeout=None
+    ):
+       
+        # 从实例对象中获取连接参数
+        # 使用 or 操作符提供默认值，避免None值导致的错误
+        host = instance.host or ''              # 主机地址，默认空字符串
+        port = instance.port or 3306            # 端口号，默认3306（MySQL标准端口）
+        username = instance.username or ''      # 用户名，默认空字符串
+        password = instance.password or ''      # 密码，默认空字符串
+        
+        # 确保端口是整数类型
+        # 有时候端口可能以字符串形式存储，需要转换
+        if not isinstance(port, int):
+            # 如果端口有值，就转成整数
+            if port:
+                port = int(port)
+            else:
+                # 如果没值，就用默认端口3306
+                port = 3306
+        
+        # 创建并返回数据库连接
+        connect_kwargs = {
             'host': host,
             'port': port,
             'user': username,
@@ -85,9 +102,10 @@ class DatabaseConnectionManager:
             'read_timeout': read_timeout or self.timeout,
             'write_timeout': write_timeout or self.timeout
         }
-        if cursorclass is not None:
-            conn_kwargs['cursorclass'] = cursorclass
-        return pymysql.connect(**conn_kwargs)
+        if cursorclass:
+            connect_kwargs['cursorclass'] = cursorclass
+        conn = pymysql.connect(**connect_kwargs)
+        return conn
     
     # 执行mysql查询
     def execute_query(self, instance, query, database=None, cursorclass=None):

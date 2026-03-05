@@ -15,7 +15,6 @@
             <a-select 
               v-model:value="selectedInstance" 
               placeholder="选择实例" 
-              @change="handleInstanceChange"
               class="instance-select"
             >
               <a-select-option v-for="opt in instanceOptions" :key="opt.value" :value="opt.value">
@@ -31,6 +30,8 @@
               <a-select 
                 v-model:value="selectedDatabase" 
                 placeholder="选择数据库"
+                :loading="databaseLoading"
+                :disabled="databaseLoading || !databaseOptions.length"
                 class="database-select"
               >
                 <a-select-option v-for="opt in databaseOptions" :key="opt.value" :value="opt.value">
@@ -75,7 +76,7 @@
 
 <script setup>
 // 组合式 API
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watch } from 'vue';
 // 提示组件
 import { message } from 'ant-design-vue';
 // 请求封装
@@ -90,6 +91,7 @@ const sqlQuery = ref('');
 // 分析结果和加载状态
 const optimizationResults = ref('');
 const isAnalyzing = ref(false);
+const databaseLoading = ref(false);
 
 // 下拉选项
 const instanceOptions = ref([]);
@@ -118,21 +120,41 @@ async function getInstanceList() {
 
 // 根据实例加载数据库列表
 async function getDatabaseList(instanceId) {
+  if (!instanceId) {
+    databaseOptions.value = [];
+    return;
+  }
   try {
+    databaseLoading.value = true;
+    databaseOptions.value = [];
     const data = await apiClient.getInstanceDatabases(Number(instanceId));
-    const databases = Array.isArray(data) ? data : (Array.isArray(data?.databases) ? data.databases : []);
-    databaseOptions.value = databases.map(db => ({ label: db, value: db }));
+    const databases = Array.isArray(data?.databases)
+      ? data.databases
+      : Array.isArray(data)
+      ? data
+      : Array.isArray(data?.data?.databases)
+      ? data.data.databases
+      : [];
+    databaseOptions.value = databases
+      .filter(db => typeof db === 'string' && db.trim())
+      .map(db => ({ label: db, value: db }));
+    if (databaseOptions.value.length === 0) {
+      message.warning('未获取到数据库，请检查实例连接或权限');
+    }
   } catch (e) {
     databaseOptions.value = [];
     message.error('获取数据库列表失败');
+  } finally {
+    databaseLoading.value = false;
   }
 }
 
 // 实例变化时清空数据库并重新拉取
-function handleInstanceChange(val) {
+watch(selectedInstance, (val) => {
   selectedDatabase.value = '';
+  databaseOptions.value = [];
   if (val) getDatabaseList(val);
-}
+});
 
 // 发起 SQL 分析
 async function executeSqlAnalysis() {

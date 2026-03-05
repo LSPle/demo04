@@ -1,7 +1,6 @@
 from flask import Blueprint, jsonify, request
 from ..models import db, Instance
 from ..utils.db_connection import db_connection_manager
-from ..services.table_analyzer_service import table_analyzer_service
 import pymysql
 from datetime import datetime
 
@@ -203,7 +202,7 @@ def delete_instance(instance_id):
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
 
 
-# 获取单个实例信息(同时添加获取版本号信息)
+# 获取单个实例信息(获取版本号)
 @instances_bp.get('/instances/<int:instance_id>')
 def get_instance(instance_id):
     try:
@@ -230,6 +229,7 @@ def get_instance(instance_id):
 # 获取实例的数据库列表
 @instances_bp.get('/instances/<int:instance_id>/databases')
 def list_instance_databases(instance_id):
+    
     try:
         user_id = request.args.get('userId')
         
@@ -242,7 +242,7 @@ def list_instance_databases(instance_id):
         ok, rows, err = db_connection_manager.execute_query(instance, "SHOW DATABASES")
         # 为保持之前的容错行为：若失败，返回空列表但状态仍为200
         if not ok:
-            return jsonify({'error': err}), 500
+            return jsonify({'databases': []}), 200
 
         # 提取数据库名称（MySQL默认返回序列结构）
         databases = []
@@ -259,6 +259,7 @@ def list_instance_databases(instance_id):
 # 获取数据库的表列表
 @instances_bp.get('/instances/<int:instance_id>/databases/<string:database>/tables')
 def list_tables(instance_id, database):
+    
     try:
         user_id = request.args.get('userId')
         
@@ -270,7 +271,7 @@ def list_tables(instance_id, database):
         # 使用统一的连接管理器执行查询，获取表列表
         ok, rows, err = db_connection_manager.execute_query(instance, "SHOW TABLES", database=database)
         if not ok:
-            return jsonify({'error': err}), 500
+            return jsonify({'tables': []}), 200
 
         # 提取表名（MySQL默认返回序列结构）
         tables = []

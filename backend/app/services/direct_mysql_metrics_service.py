@@ -47,62 +47,64 @@ class DirectMySQLMetricsService:
 
     #在一次调用中完成两次采样，按窗口秒数计算 QPS/TPS
     def get_qps_tps_window(self, inst: Instance, window_s: int = 6):
-        conn = self._connect_to_mysql(inst)
-        if not conn:
-            return {'qps': None, 'tps': None, 'error': 'MySQL连接失败'}
+        if not inst:
+            return {'qps': None, 'tps': None, 'error': '实例为空'}
         try:
             status_query = """
             SHOW GLOBAL STATUS WHERE Variable_name IN (
                 'Queries', 'Com_commit', 'Com_rollback'
             )
             """
-            # 第一次采样
+            def fetch_status(query):
+                ok, rows, err = db_connection_manager.execute_query(inst, query)
+                if not ok or not rows:
+                    return None, err or '状态查询失败'
+                return rows, ""
+
+            def parse_rows(rows):
+                status = {}
+                for row in rows:
+                    if isinstance(row, (list, tuple)) and len(row) >= 2:
+                        name = row[0]
+                        val = row[1]
+                    elif isinstance(row, dict):
+                        name = row.get('Variable_name') or row.get('VARIABLE_NAME')
+                        val = row.get('Value') or row.get('VALUE')
+                    else:
+                        name = None
+                        val = None
+                    if not name:
+                        continue
+                    try:
+                        status[name] = int(val) if (val is not None and str(val).isdigit()) else 0
+                    except Exception:
+                        status[name] = 0
+                return status
+
             t0 = time.time()
-            r1 = self.execute_query(conn, status_query)
-            logger.info(f"第一次采样状态查询结果: {r1}")
-            if not r1 or not r1.get('rows'):
-                return {'qps': None, 'tps': None, 'error': '状态查询失败'}
-            s1: Dict[str, int] = {}
-            for row in r1['rows']:
-                name = row[0]
-                val = row[1]
-                try:
-                    s1[name] = int(val) if (val is not None and str(val).isdigit()) else 0
-                except Exception:
-                    s1[name] = 0
-            # 睡眠窗口秒数
-            # try:
-            #     sleep_seconds = max(1, int(window_s))
-            # except Exception:
-            #     sleep_seconds = 6
-            time.sleep(6)
-            # 第二次采样
+            rows1, err1 = fetch_status(status_query)
+            if not rows1:
+                return {'qps': None, 'tps': None, 'error': f'状态查询失败: {err1}'}
+            s1 = parse_rows(rows1)
+
+            try:
+                sleep_seconds = max(1, int(window_s))
+            except Exception:
+                sleep_seconds = 6
+            time.sleep(sleep_seconds)
+
             t1 = time.time()
-            r2 = self.execute_query(conn, status_query)
-            if not r2 or not r2.get('rows'):
-                return {'qps': None, 'tps': None, 'error': '状态查询失败'}
-            s2: Dict[str, int] = {}
-            for row in r2['rows']:
-                name = row[0]
-                val = row[1]
-                try:
-                    s2[name] = int(val) if (val is not None and str(val).isdigit()) else 0
-                except Exception:
-                    s2[name] = 0
-            # 计算差值与速率
-            # 计算时间间隔，避免出现除以 0
+            rows2, err2 = fetch_status(status_query)
+            if not rows2:
+                return {'qps': None, 'tps': None, 'error': f'状态查询失败: {err2}'}
+            s2 = parse_rows(rows2)
+
             dt = max(1e-3, t1 - t0)
-            # 计算两次采样的查询总数差值
             queries_diff = max(0, s2.get('Queries', 0) - s1.get('Queries', 0))
-            # 第二次采样的提交+回滚总数
             trx2 = s2.get('Com_commit', 0) + s2.get('Com_rollback', 0)
-            # 第一次采样的提交+回滚总数
             trx1 = s1.get('Com_commit', 0) + s1.get('Com_rollback', 0)
-            # 计算两次采样的事务总数差值
             tps_diff = max(0, trx2 - trx1)
-            # 计算每秒查询数（QPS）
             qps = round(queries_diff / dt, 2)
-            # 计算每秒事务数（TPS）
             tps = round(tps_diff / dt, 2)
             return {
                 'qps': qps,
@@ -113,8 +115,6 @@ class DirectMySQLMetricsService:
         except Exception as e:
             logger.info(f"窗口采样失败: {e}")
             return {'qps': None, 'tps': None, 'error': str(e)}
-        finally:         
-            conn.close()
  
     #从performance_schema获取 性能指标
     def get_performance_schema_metrics(self, inst: Instance):

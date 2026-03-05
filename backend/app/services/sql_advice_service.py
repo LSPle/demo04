@@ -58,12 +58,10 @@ def build_prompt(summary):
         cols = list(t.get("columns") or [])
         pk = list(t.get("primary_key") or [])
         for c in cols:
-            col_name = _safe_str(c.get('name'))
-            col_type = _safe_str(c.get('type'))
-            col_null = _safe_str(c.get('null'))
-            col_key = _safe_str(c.get('key'))
-            line = f"- 列名: {col_name}; 数据类型: {col_type}; 是否允许空: {col_null}; 键类型: {col_key}"
-            lines.append(line)
+            lines.append(
+                f"- 列名: {_safe_str(c.get('name'))}; 数据类型: {_safe_str(c.get('type'))}; 是否允许空: {_safe_str(c.get('null'))}; 键类型: {_safe_str(c.get('key'))}"
+            )
+        lines.append(f"- 主键列: {', '.join([_safe_str(x) for x in pk])}")
 
     # 索引信息
     lines.append("索引信息")
@@ -96,28 +94,26 @@ def build_prompt(summary):
     return prompt
 
 
-def call_deepseek(messages: List[Dict[str, Any]]) -> str:
+def call_deepseek(messages: List[Dict[str, Any]], max_tokens: int = 800) -> str:
     if not LLM_ENABLED or not DEEPSEEK_API_KEY:
         return ""
-
     url = f"{DEEPSEEK_BASE_URL}/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
         "Content-Type": "application/json",
     }
-    body = {
+    payload = {
         "model": DEEPSEEK_MODEL,
         "messages": messages,
         "temperature": 0.2,
+        "max_tokens": max_tokens,
     }
-
     try:
-        resp = requests.post(url, headers=headers, json=body, timeout=DEEPSEEK_TIMEOUT)
+        resp = requests.post(url, headers=headers, json=payload, timeout=DEEPSEEK_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
-        choice = (data.get("choices") or [{}])[0]
-        msg = choice.get("message") or {}
-        content = msg.get("content") or ""
+        message = (data.get("choices", [{}])[0] or {}).get("message", {})
+        content = message.get("content", "")
         return content.strip()
     except Exception as e:
         logger.warning(f"DeepSeek 调用失败: {e}")
@@ -127,11 +123,13 @@ def call_deepseek(messages: List[Dict[str, Any]]) -> str:
 def get_sql_advice(summary: Dict[str, Any]) -> str:
     try:
         prompt = build_prompt(summary)
+        try:
+            logger.info("SQL优化 Summary Keys: %s", list(summary.keys()))
+            logger.info("SQL优化 Prompt:\n%s", prompt)
+        except Exception:
+            pass
         messages = [{"role": "user", "content": prompt}]
-        logger.info("summary: %s", summary)
-        logger.info("SQL优化 Summary Keys: %s", list(summary.keys()))
-        logger.info("SQL优化 Prompt:\n%s", prompt)
-        return call_deepseek(messages) or ""
+        return call_deepseek(messages, max_tokens=800) or ""
     except Exception as e:
         logger.error(f"生成SQL优化建议失败: {e}")
         return ""

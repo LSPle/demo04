@@ -292,10 +292,10 @@ class ApiClient {
   /**
    * 获取状态汇总
    */
-  async getStatusSummary() {
-    // 监控接口无需 userId（全局）
-    return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
-  }
+  // async getStatusSummary() {
+  //   // 监控接口无需 userId（全局）
+  //   return this.get(API_ENDPOINTS.MONITOR_SUMMARY);
+  // }
 
   /**
    * 获取配置优化摘要（新路径 /config）
@@ -313,9 +313,9 @@ class ApiClient {
   /**
    * 获取配置优化建议（DeepSeek，新路径 /config）
    */
-  // async getConfigAdvice(instanceId) {
-  //   return this.post(API_ENDPOINTS.CONFIG_ADVISE(instanceId), {}, true, { timeout: 300000 });
-  // }
+  async getConfigAdvice(instanceId) {
+    return this.post(API_ENDPOINTS.CONFIG_ADVISE(instanceId), {}, true, { timeout: 300000 });
+  }
 
   /**
    * 配置建议（直接拼接前端已有数据，纯文本返回）

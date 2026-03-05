@@ -119,9 +119,8 @@ async function getInstanceList() {
 // 根据实例加载数据库列表
 async function getDatabaseList(instanceId) {
   try {
-    const data = await apiClient.getInstanceDatabases(Number(instanceId));
-    const databases = Array.isArray(data) ? data : (Array.isArray(data?.databases) ? data.databases : []);
-    databaseOptions.value = databases.map(db => ({ label: db, value: db }));
+    const data = await apiClient.getInstanceDatabases(instanceId);
+    databaseOptions.value = (data?.databases || []).map(db => ({ label: db, value: db }));
   } catch (e) {
     databaseOptions.value = [];
     message.error('获取数据库列表失败');
